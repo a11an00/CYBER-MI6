@@ -1,6 +1,7 @@
 <script lang="ts">
   import { relativeTime } from '../lib/format';
   import { href } from '../lib/router';
+  import ThemeToggle from './ThemeToggle.svelte';
 
   // Matches the Figma "Connection Indicator" component. Wired to the
   // WebSocket store in a later step; the text label is always shown next to
@@ -48,6 +49,7 @@
     <p class="connection" data-state={connection} role="status">
       <span class="dot" aria-hidden="true"></span>{labels[connection]}
     </p>
+    <ThemeToggle />
   </div>
 </header>
 
@@ -125,6 +127,9 @@
     .tagline,
     .last-event {
       display: none;
+    }
+    .status {
+      gap: var(--spacing-md);
     }
     .back {
       display: inline;

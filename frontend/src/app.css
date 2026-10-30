@@ -25,6 +25,21 @@ a {
   outline-offset: 2px;
 }
 
+/* Added for 300 ms by the theme toggle (lib/theme.ts) so every colour
+   cross-fades instead of snapping. Skipped when reduced motion is on.
+   The toggle keeps its own slide/spin animation. */
+.theme-transition,
+.theme-transition *:not(.theme-toggle, .theme-toggle *),
+.theme-transition *:not(.theme-toggle, .theme-toggle *)::before,
+.theme-transition *:not(.theme-toggle, .theme-toggle *)::after {
+  transition:
+    background-color 300ms ease,
+    border-color 300ms ease,
+    color 300ms ease,
+    fill 300ms ease,
+    stroke 300ms ease !important;
+}
+
 h1 {
   font: var(--text-display-stat);
   margin: 0.5rem 0 1rem;

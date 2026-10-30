@@ -3,9 +3,9 @@ import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 import './app.css';
 import App from './App.svelte';
-import { applyThemeOverride } from './lib/theme';
+import { initTheme } from './lib/theme';
 
-applyThemeOverride();
+initTheme();
 
 const target = document.getElementById('app');
 if (!target) throw new Error('#app element missing from index.html');
