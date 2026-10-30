@@ -2,8 +2,8 @@ import pytest
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from app.config import Settings, get_settings
-from app.security import require_api_key
+from backend.config import Settings, get_settings
+from backend.security import require_api_key
 
 
 def make_client(api_key: str) -> TestClient:

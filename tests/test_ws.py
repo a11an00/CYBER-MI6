@@ -5,8 +5,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.routes import ws as ws_module
-from app.routes.ws import ConnectionManager, broadcast_event, router
+from backend.routes import websocket as ws_module
+from backend.routes.websocket import ConnectionManager, broadcast_event, router
 
 
 def wait_until(condition, timeout: float = 2.0) -> bool:
