@@ -7,7 +7,7 @@
  * Which one runs is decided once, at build time (see `dataSource` below), so
  * views never know or care where data comes from.
  */
-import type { Alert, AlertFilters, AlertStatus, Event, EventFilters, Stats } from '../types';
+import type { Alert, AlertFilters, AlertStatus, BlockedIp, BlockRequest, Event, EventFilters, Stats } from '../types';
 import { reportFailure, reportSuccess } from '../health';
 import { ApiError, buildQuery, request } from './http';
 
@@ -25,6 +25,9 @@ export interface DataClient {
   getAlert(id: number, signal?: AbortSignal): Promise<AlertDetail>;
   updateAlertStatus(id: number, status: AlertStatus): Promise<Alert>;
   listEvents(filters?: EventFilters, signal?: AbortSignal): Promise<Event[]>;
+  listBlocked(signal?: AbortSignal): Promise<BlockedIp[]>;
+  blockIp(body: BlockRequest): Promise<BlockedIp>;
+  unblockIp(ip: string): Promise<void>;
 }
 
 export const httpClient: DataClient = {
@@ -35,6 +38,21 @@ export const httpClient: DataClient = {
   updateAlertStatus: (id, status) => request<Alert>('PATCH', `/api/alerts/${id}`, { body: { status } }),
   listEvents: (filters = {}, signal) =>
     request<Event[]>('GET', `/api/events${buildQuery({ ...filters })}`, { signal }),
+
+  /*
+   * PROPOSED blocklist endpoints. The backend has no blocking yet; these are
+   * the frontend's suggested contract, to be agreed with the API owner:
+   *   GET    /api/blocklist        → BlockedIp[]
+   *   POST   /api/blocklist        {ip, alert_id?, reason?} → BlockedIp (201)
+   *   DELETE /api/blocklist/{ip}   → 204
+   * Enforcement (actually refusing the traffic) is the backend's job.
+   * Until they exist, the real API answers 404 and the panel says so.
+   */
+  listBlocked: (signal) => request<BlockedIp[]>('GET', '/api/blocklist', { signal }),
+  blockIp: (body) => request<BlockedIp>('POST', '/api/blocklist', { body }),
+  unblockIp: async (ip) => {
+    await request<null>('DELETE', `/api/blocklist/${encodeURIComponent(ip)}`);
+  },
 };
 
 /**
@@ -90,4 +108,7 @@ export const api: DataClient = {
   getAlert: (id, signal) => tracked(async () => (await resolve()).getAlert(id, signal)),
   updateAlertStatus: (id, status) => tracked(async () => (await resolve()).updateAlertStatus(id, status)),
   listEvents: (filters, signal) => tracked(async () => (await resolve()).listEvents(filters, signal)),
+  listBlocked: (signal) => tracked(async () => (await resolve()).listBlocked(signal)),
+  blockIp: (body) => tracked(async () => (await resolve()).blockIp(body)),
+  unblockIp: (ip) => tracked(async () => (await resolve()).unblockIp(ip)),
 };

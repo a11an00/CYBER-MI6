@@ -9,14 +9,14 @@
  *   ?mock=empty     every list is empty
  *   ?mock=error     every request fails with HTTP 500
  *   ?mock=offline   every request fails as unreachable
- *   ?mock=save-error  data loads, but every status change (PATCH) fails
+ *   ?mock=save-error  data loads, but every change (status PATCH, block/unblock) fails
  *   ?mock=ws-down   data loads, but the live stream never connects
  *
  * startMockLive() stands in for WebSocket /ws: a new event every few seconds
  * and, now and then, an updated alert, written into the same in-memory data
  * the REST calls read, so tables and the feed agree.
  */
-import type { Alert, AlertFilters, AlertStatus, Event, EventFilters, Stats } from '../types';
+import type { Alert, AlertFilters, AlertStatus, BlockedIp, Event, EventFilters, Stats } from '../types';
 import { ALERT_STATUSES, OPEN_STATUSES, SEVERITIES } from '../types';
 import type { LiveHandlers } from '../ws';
 import type { AlertDetail, DataClient } from './client';
@@ -65,6 +65,14 @@ async function respond<T>(path: string, produce: () => T, signal?: AbortSignal):
 }
 
 const isEmpty = () => scenario === 'empty';
+
+const blocklist = new Map<string, BlockedIp>();
+
+/** Same rule the backend uses for src_ip (models._check_ip): a valid IPv4/IPv6 address. */
+function isIp(value: string): boolean {
+  if (/^(\d{1,3})(\.\d{1,3}){3}$/.test(value)) return value.split('.').every((n) => Number(n) <= 255);
+  return value.includes(':') && /^[0-9a-f:.]+$/i.test(value);
+}
 
 export const mockClient: DataClient = {
   getStats: (signal) =>
@@ -133,6 +141,29 @@ export const mockClient: DataClient = {
         .sort((a, b) => byNewest(a.timestamp, b.timestamp) || b.id - a.id);
       return page(rows, filters.limit, filters.offset);
     }, signal),
+
+  listBlocked: (signal) =>
+    respond('/api/blocklist', () => (isEmpty() ? [] : [...blocklist.values()]), signal),
+
+  blockIp: (body) =>
+    respond('/api/blocklist', () => {
+      if (scenario === 'save-error') throw new ApiError(422, '/api/blocklist', 'Block rejected by the API', 'validation_error');
+      if (!isIp(body.ip)) throw new ApiError(422, '/api/blocklist', `not a valid IP address: '${body.ip}'`, 'validation_error');
+      const entry: BlockedIp = {
+        ip: body.ip,
+        alert_id: body.alert_id ?? null,
+        reason: body.reason ?? null,
+        blocked_at: new Date().toISOString(),
+      };
+      blocklist.set(body.ip, entry);
+      return entry;
+    }),
+
+  unblockIp: (ip) =>
+    respond(`/api/blocklist/${ip}`, () => {
+      if (scenario === 'save-error') throw new ApiError(422, `/api/blocklist/${ip}`, 'Unblock rejected by the API', 'validation_error');
+      if (!blocklist.delete(ip)) throw new ApiError(404, `/api/blocklist/${ip}`, 'IP is not blocked', 'http_404');
+    }),
 };
 
 // --- live stream (stands in for WebSocket /ws) --------------------------------

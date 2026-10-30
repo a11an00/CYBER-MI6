@@ -5,11 +5,13 @@
   // Figma component "Button": Primary / Secondary / Ghost, each with Default,
   // Hover, Focus and Disabled states. radius/md, padding spacing/sm ×
   // spacing/lg, gap spacing/xs, label Body/Strong.
+  // "danger" is not a Figma variant: it reuses the Figma severity/critical
+  // colours for destructive actions such as blocking an IP.
   let {
     variant = 'primary',
     children,
     ...rest
-  }: { variant?: 'primary' | 'secondary' | 'ghost'; children: Snippet } & HTMLButtonAttributes = $props();
+  }: { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; children: Snippet } & HTMLButtonAttributes = $props();
 </script>
 
 <button type="button" class="btn {variant}" {...rest}>{@render children()}</button>
@@ -59,5 +61,14 @@
   }
   .ghost:hover:not(:disabled) {
     background: var(--color-bg-surface-raised);
+  }
+
+  .danger {
+    background: var(--color-severity-critical-bg);
+    border-color: var(--color-severity-critical-border);
+    color: var(--color-severity-critical-text);
+  }
+  .danger:hover:not(:disabled) {
+    border-color: var(--color-severity-critical-dot);
   }
 </style>

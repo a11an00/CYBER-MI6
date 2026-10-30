@@ -66,7 +66,7 @@ function detailMessage(body: unknown): string | null {
 }
 
 export async function request<T>(
-  method: 'GET' | 'PATCH',
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   options: { body?: unknown; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<T> {

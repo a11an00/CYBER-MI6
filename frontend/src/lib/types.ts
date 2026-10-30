@@ -100,5 +100,24 @@ export interface AlertFilters {
   offset?: number;
 }
 
+/**
+ * PROPOSED: an IP on the blocklist. Not in backend/models.py yet; agree the
+ * shape with the API owner (see lib/api/client.ts, blocklist endpoints).
+ */
+export interface BlockedIp {
+  ip: string;
+  /** The alert the analyst blocked it from, if any. */
+  alert_id: number | null;
+  reason: string | null;
+  blocked_at: IsoDateTime;
+}
+
+/** PROPOSED: body of POST /api/blocklist. */
+export interface BlockRequest {
+  ip: string;
+  alert_id?: number;
+  reason?: string;
+}
+
 /** WebSocket message from /ws (app/routes/ws.py). */
 export type LiveMessage = { kind: 'event'; data: Event } | { kind: 'alert'; data: Alert };
