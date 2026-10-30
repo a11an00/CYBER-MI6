@@ -360,12 +360,24 @@ def upsert_alert(
         existing = _row_to_alert(row)
         incoming = _dedupe_ids(a.evidence_event_ids)
         seen = set(existing.evidence_event_ids)
-        new_ids = [i for i in incoming if i not in seen]
-        if incoming and not new_ids:  # same evidence as before: nothing new to record
+        min_seen = (
+            min(existing.evidence_event_ids)
+            if (existing.evidence_event_ids and existing.count > len(existing.evidence_event_ids))
+            else None
+        )
+        new_ids = [
+            i for i in incoming
+            if i not in seen and (min_seen is None or i > min_seen)
+        ]
+        severity = max(existing.severity, a.severity, key=lambda s: SEVERITY_RANK[s])
+        escalated = SEVERITY_RANK[a.severity] > SEVERITY_RANK[existing.severity]
+        details_changed = (a.title != existing.title) or (a.explanation != existing.explanation)
+
+        if incoming and not new_ids and not escalated and not details_changed:
             return existing, False
+
         added = len(new_ids) if incoming else 1
         merged = (existing.evidence_event_ids + new_ids)[-MAX_EVIDENCE_IDS:]
-        severity = max(existing.severity, a.severity, key=lambda s: SEVERITY_RANK[s])
         conn.execute(
             "UPDATE alerts SET updated_at = ?, severity = ?, title = ?, evidence_event_ids = ?, "
             "count = count + ?, explanation = ? WHERE id = ?",
@@ -495,6 +507,8 @@ def purge_old_events(
     """
     if retention_days <= 0:
         raise ValueError("retention_days must be positive")
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
     cutoff = to_db_ts((now or utcnow()) - timedelta(days=retention_days))
     total = 0
     while True:
