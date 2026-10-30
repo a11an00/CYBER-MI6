@@ -1,0 +1,211 @@
+/*
+ * Design tokens from the Figma file "CYBER-MI6 Design System"
+ * (Components page: "Review — Light" and "Review — Dark" frames).
+ *
+ * Names follow the Figma variables (color/bg/canvas → --color-bg-canvas,
+ * status/new/fg → --color-status-new-fg, radius/md → --radius-md).
+ * Every value below was read from the Figma file.
+ *
+ * Light mode is the default. Dark mode follows the operating system, and
+ * <html data-theme="light|dark"> overrides it (see src/lib/theme.ts).
+ */
+
+:root {
+  /* Typography: Figma text styles */
+  --font-sans: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  /* Display/Stat: Inter 600 28/32 */
+  --text-display-stat: 600 28px / 32px var(--font-sans);
+  /* Body/Default: Inter 400 14/20 */
+  --text-body-default: 400 14px / 20px var(--font-sans);
+  /* Body/Strong: Inter 500 14/20 */
+  --text-body-strong: 500 14px / 20px var(--font-sans);
+  /* Body/Small: Inter 400 12/16 */
+  --text-body-small: 400 12px / 16px var(--font-sans);
+  /* Select value, status pill: Inter 500 12/16 (no named style in Figma) */
+  --text-body-small-strong: 500 12px / 16px var(--font-sans);
+  /* Label/Caps: Inter 600 11/16, +4% tracking, uppercase */
+  --text-label-caps: 600 11px / 16px var(--font-sans);
+  --tracking-label-caps: 0.04em;
+  /* Mono/Default: JetBrains Mono 400 13/20 */
+  --text-mono-default: 400 13px / 20px var(--font-mono);
+  /* Mono/Small: JetBrains Mono 400 12/16 */
+  --text-mono-small: 400 12px / 16px var(--font-mono);
+  /* Heading/H2: Inter 600 16/24 (card titles, alert title) */
+  --text-heading-card: 600 16px / 24px var(--font-sans);
+
+  /* Spacing and radius: Figma variables spacing/* and radius/* */
+  --spacing-2xs: 2px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+  --spacing-2xl: 32px;
+  --radius-sm: 4px; /* status pills */
+  --radius-md: 6px; /* buttons, selects, banner */
+  --radius-lg: 10px; /* cards, stat tiles */
+}
+
+/* ---- Light (default) ------------------------------------------------- */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --color-bg-canvas: #f8fafc;
+  --color-bg-surface: #ffffff;
+  --color-bg-surface-raised: #f1f5f9; /* table header, hover/selected rows */
+  --color-border-default: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+
+  --color-accent-default: #0e7490; /* primary button, links */
+  --color-accent-hover: #155e75;
+  --color-accent-text: #0e7490; /* color/accent/text: links such as "+ 36 more events" */
+  --color-focus-ring: #0891b2;
+  --color-on-accent: #ffffff;
+
+  /* Severity: text colour + dot colour (handbook §9: always with a label) */
+  --color-severity-low-text: #15803d;
+  --color-severity-low-dot: #16a34a;
+  --color-severity-medium-text: #a16207;
+  --color-severity-medium-dot: #eab308;
+  --color-severity-high-text: #c2410c;
+  --color-severity-high-dot: #f97316;
+  --color-severity-critical-text: #b91c1c;
+  --color-severity-critical-dot: #dc2626;
+  /* severity/critical/bg and /border: the "API unreachable" banner */
+  --color-severity-critical-bg: #fee2e2;
+  --color-severity-critical-border: #f87171;
+
+  /* Status pills: background / text / border */
+  --color-status-new-bg: #dbeafe;
+  --color-status-new-fg: #1e40af;
+  --color-status-new-border: #60a5fa;
+  --color-status-investigating-bg: #ede9fe;
+  --color-status-investigating-fg: #5b21b6;
+  --color-status-investigating-border: #a78bfa;
+  --color-status-resolved-bg: #dcfce7;
+  --color-status-resolved-fg: #166534;
+  --color-status-resolved-border: #4ade80;
+  --color-status-false-positive-bg: #f1f5f9;
+  --color-status-false-positive-fg: #475569;
+  --color-status-false-positive-border: #cbd5e1;
+
+  /* Connection indicator */
+  --color-connection-live: #16a34a;
+  --color-connection-reconnecting: #d97706;
+  --color-connection-offline: #dc2626;
+
+  /* "API unreachable" banner (Figma Data states). Estimated: these three
+     aren't in the Review sheets; confirm against the States frame. */
+}
+
+/* ---- Dark ------------------------------------------------------------ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --color-bg-canvas: #0b1220;
+    --color-bg-surface: #0f172a;
+    --color-bg-surface-raised: #1e293b;
+    --color-border-default: #334155;
+    --color-border-strong: #475569;
+
+    --color-text-primary: #f8fafc;
+    --color-text-secondary: #94a3b8;
+    /* Kept exactly as in Figma. Known issue: 3.75:1 on --color-bg-surface,
+       below WCAG AA's 4.5:1 for small text; raised with the design owner. */
+    --color-text-muted: #64748b;
+
+    --color-accent-default: #22d3ee;
+    --color-accent-hover: #67e8f9;
+    --color-accent-text: #22d3ee;
+    --color-focus-ring: #22d3ee;
+    --color-on-accent: #0f172a;
+
+    --color-severity-low-text: #4ade80;
+    --color-severity-low-dot: #4ade80;
+    --color-severity-medium-text: #facc15;
+    --color-severity-medium-dot: #facc15;
+    --color-severity-high-text: #fb923c;
+    --color-severity-high-dot: #fb923c;
+    --color-severity-critical-text: #f87171;
+    --color-severity-critical-dot: #f87171;
+    --color-severity-critical-bg: #450a0a;
+    --color-severity-critical-border: #991b1b;
+
+    --color-status-new-bg: #172554;
+    --color-status-new-fg: #60a5fa;
+    --color-status-new-border: #1e40af;
+    --color-status-investigating-bg: #2e1065;
+    --color-status-investigating-fg: #a78bfa;
+    --color-status-investigating-border: #5b21b6;
+    --color-status-resolved-bg: #052e16;
+    --color-status-resolved-fg: #4ade80;
+    --color-status-resolved-border: #166534;
+    --color-status-false-positive-bg: #1e293b;
+    --color-status-false-positive-fg: #cbd5e1;
+    --color-status-false-positive-border: #475569;
+
+    --color-connection-live: #4ade80;
+    --color-connection-reconnecting: #fbbf24;
+    --color-connection-offline: #f87171;
+  }
+}
+
+/* Same values as the media query above, for an explicit override. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-bg-canvas: #0b1220;
+  --color-bg-surface: #0f172a;
+  --color-bg-surface-raised: #1e293b;
+  --color-border-default: #334155;
+  --color-border-strong: #475569;
+
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  /* Kept exactly as in Figma. Known issue: 3.75:1 on --color-bg-surface,
+     below WCAG AA's 4.5:1 for small text; raised with the design owner. */
+  --color-text-muted: #64748b;
+
+  --color-accent-default: #22d3ee;
+  --color-accent-hover: #67e8f9;
+  --color-accent-text: #22d3ee;
+  --color-focus-ring: #22d3ee;
+  --color-on-accent: #0f172a;
+
+  --color-severity-low-text: #4ade80;
+  --color-severity-low-dot: #4ade80;
+  --color-severity-medium-text: #facc15;
+  --color-severity-medium-dot: #facc15;
+  --color-severity-high-text: #fb923c;
+  --color-severity-high-dot: #fb923c;
+  --color-severity-critical-text: #f87171;
+  --color-severity-critical-dot: #f87171;
+  --color-severity-critical-bg: #450a0a;
+  --color-severity-critical-border: #991b1b;
+
+  --color-status-new-bg: #172554;
+  --color-status-new-fg: #60a5fa;
+  --color-status-new-border: #1e40af;
+  --color-status-investigating-bg: #2e1065;
+  --color-status-investigating-fg: #a78bfa;
+  --color-status-investigating-border: #5b21b6;
+  --color-status-resolved-bg: #052e16;
+  --color-status-resolved-fg: #4ade80;
+  --color-status-resolved-border: #166534;
+  --color-status-false-positive-bg: #1e293b;
+  --color-status-false-positive-fg: #cbd5e1;
+  --color-status-false-positive-border: #475569;
+
+  --color-connection-live: #4ade80;
+  --color-connection-reconnecting: #fbbf24;
+  --color-connection-offline: #f87171;
+
+}

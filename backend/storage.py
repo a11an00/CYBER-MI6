@@ -21,8 +21,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
-from .db import Database, from_db_ts, to_db_ts
-from .models import (
+from backend.db import Database, from_db_ts, to_db_ts
+from backend.models import (
     MAX_EVIDENCE_IDS,
     OPEN_STATUSES,
     SEVERITIES,

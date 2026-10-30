@@ -1,0 +1,54 @@
+/* Global base styles. All colours and type come from styles/tokens.css. */
+@import './styles/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font: var(--text-body-default);
+  color: var(--color-text-primary);
+  background: var(--color-bg-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-accent-default);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+h1 {
+  font: var(--text-display-stat);
+  margin: 0.5rem 0 1rem;
+}
+
+code {
+  font: var(--text-mono-default);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Temporary: marks where each view's real content will go. */
+.placeholder {
+  padding: 1rem;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 8px;
+  font: var(--text-body-small);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-surface);
+}
