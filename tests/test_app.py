@@ -2,8 +2,8 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-from app.config import get_settings
-from app.main import create_app
+from backend.config import get_settings
+from backend.main import create_app
 
 
 class Body(BaseModel):
@@ -15,11 +15,11 @@ def settings_env(tmp_path, monkeypatch):
     monkeypatch.setenv("API_KEY", "test-key")
     get_settings.cache_clear()
     yield tmp_path
-    get_settings.cache_clear
+    get_settings.cache_clear()
     
 @pytest.fixture
 def client(settings_env):
-    app = create_app()
+    app = create_app(mount_static=False)
     
     @app.post("/_test/validate")
     def validate(body: Body): #test-only route to trigger a validation error
@@ -44,7 +44,7 @@ def test_validation_error_has_standard_shape(client):
     assert body["detail"][0]["loc"][-1] == "n"
     
 def test_startup_creates_database_file(settings_env):
-    app = create_app()
+    app = create_app(mount_static=False)
     with TestClient(app):
         assert (settings_env / "test.db").exists()
         assert app.state.db is not None
