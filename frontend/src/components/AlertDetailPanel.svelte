@@ -6,6 +6,7 @@
   import { clockTime, eventSummary } from '../lib/format';
   import { RETRY_SECONDS } from '../lib/health';
   import type { AlertStatus, Event } from '../lib/types';
+  import BlockIpControl from './BlockIpControl.svelte';
   import Button from './Button.svelte';
   import SeverityBadge from './SeverityBadge.svelte';
   import StateBlock from './StateBlock.svelte';
@@ -189,6 +190,9 @@
           {/each}
         </div>
         {#if saveError}<p class="save-error" role="alert">Status not changed: {saveError}</p>{/if}
+        {#if alert.src_ip}
+          <BlockIpControl ip={alert.src_ip} alertId={alert.id} reason={`${alert.rule}: ${alert.title}`} />
+        {/if}
       </div>
     {/if}
   {/if}

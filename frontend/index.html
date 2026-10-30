@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CYBER-MI6</title>
+    <script>
+      // Apply the saved/URL theme before first paint (no light→dark flash).
+      // src/lib/theme.ts takes over once the app loads; keep the key in sync.
+      (function () {
+        try {
+          var url = new URLSearchParams(location.search).get('theme');
+          var saved = localStorage.getItem('cybermi6-theme');
+          var t = url === 'light' || url === 'dark' ? url : saved;
+          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
