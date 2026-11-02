@@ -18,6 +18,7 @@ database). Use a temporary file in tests.
 
 import sqlite3
 import threading
+import weakref
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -67,8 +68,8 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_alerts_dedup      ON alerts (rule, src_ip, updated_at);
-CREATE INDEX IF NOT EXISTS idx_alerts_status     ON alerts (status, updated_at);
-CREATE INDEX IF NOT EXISTS idx_alerts_severity   ON alerts (severity, updated_at);
+CREATE INDEX IF NOT EXISTS idx_alerts_status     ON alerts (status, created_at);
+CREATE INDEX IF NOT EXISTS idx_alerts_severity   ON alerts (severity, created_at);
 CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts (created_at);
 """
 
@@ -102,8 +103,16 @@ class Database:
         self.path = Path(path)
         self.busy_timeout_ms = busy_timeout_ms
         self._local = threading.local()
-        self._all: list[sqlite3.Connection] = []
+        self._all: set[sqlite3.Connection] = set()
         self._all_lock = threading.Lock()
+
+    def _cleanup_conn(self, conn: sqlite3.Connection) -> None:
+        with self._all_lock:
+            self._all.discard(conn)
+        try:
+            conn.close()
+        except sqlite3.Error:
+            pass
 
     # -- connections ---------------------------------------------------------
     def connection(self) -> sqlite3.Connection:
@@ -124,8 +133,13 @@ class Database:
             conn.execute("PRAGMA temp_store = MEMORY")
             self._local.conn = conn
             self._local.depth = 0
+            self._local.is_write = False
             with self._all_lock:
-                self._all.append(conn)
+                self._all.add(conn)
+            try:
+                weakref.finalize(threading.current_thread(), self._cleanup_conn, conn)
+            except (TypeError, ValueError):
+                pass
         return conn
 
     @contextmanager
@@ -137,6 +151,8 @@ class Database:
         """
         conn = self.connection()
         if self._local.depth > 0:
+            if write and not self._local.is_write:
+                raise RuntimeError("cannot start a write transaction inside an active read transaction")
             self._local.depth += 1
             try:
                 yield conn
@@ -145,6 +161,7 @@ class Database:
             return
         conn.execute("BEGIN IMMEDIATE" if write else "BEGIN")
         self._local.depth = 1
+        self._local.is_write = write
         try:
             yield conn
         except BaseException:
@@ -154,6 +171,7 @@ class Database:
             conn.execute("COMMIT")
         finally:
             self._local.depth = 0
+            self._local.is_write = False
 
     # -- schema --------------------------------------------------------------
     def init_schema(self) -> None:
@@ -178,7 +196,7 @@ class Database:
     def close(self) -> None:
         """Close every connection opened through this object (call at shutdown / in tests)."""
         with self._all_lock:
-            conns, self._all = self._all, []
+            conns, self._all = list(self._all), set()
         for conn in conns:
             try:
                 conn.close()

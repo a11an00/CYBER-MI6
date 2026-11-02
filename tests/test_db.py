@@ -23,6 +23,18 @@ def test_tables_and_required_indexes_exist(db):
     assert {"idx_events_timestamp", "idx_events_type_ts", "idx_events_src_type_ts"} <= indexes
 
 
+def test_alert_filter_indexes_eliminate_temp_btree_sort(db):
+    conn = db.connection()
+    queries = [
+        ("SELECT id FROM alerts WHERE severity = ? ORDER BY created_at DESC, id DESC LIMIT 10", ("high",)),
+        ("SELECT id FROM alerts WHERE status = ? ORDER BY created_at DESC, id DESC LIMIT 10", ("new",)),
+    ]
+    for sql, params in queries:
+        plan = " | ".join(r[3] for r in conn.execute("EXPLAIN QUERY PLAN " + sql, params))
+        assert "USE TEMP B-TREE FOR ORDER BY" not in plan
+        assert "idx_alerts_" in plan
+
+
 def test_init_schema_is_idempotent_and_keeps_data(tmp_path):
     path = tmp_path / "x.db"
     db1 = open_database(path)
@@ -84,6 +96,24 @@ def test_nested_transaction_joins_outer_and_rolls_back_together(db):
     assert db.connection().execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 0
 
 
+def test_write_inside_read_transaction_is_rejected(db):
+    with db.transaction(write=False) as conn:
+        with pytest.raises(RuntimeError, match="cannot start a write transaction inside an active read transaction"):
+            with db.transaction(write=True):
+                pass
+    # Verify transaction depth and connection are cleaned up properly
+    assert db._local.depth == 0
+
+
+def test_read_inside_write_transaction_is_allowed(db):
+    with db.transaction(write=True) as conn:
+        conn.execute("INSERT INTO alerts (created_at, updated_at, rule, severity, title) VALUES ('a','a','r','low','t')")
+        with db.transaction(write=False) as inner:
+            assert inner is conn
+            assert inner.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 1
+    assert db.connection().execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 1
+
+
 def test_each_thread_gets_its_own_connection(db):
     seen = {}
 
@@ -94,3 +124,20 @@ def test_each_thread_gets_its_own_connection(db):
     t.start()
     t.join()
     assert seen["other"] is not db.connection()
+
+
+def test_connections_cleaned_up_when_threads_exit(db):
+    import gc
+
+    db.connection()
+    initial_count = len(db._all)
+
+    def run_workers():
+        for _ in range(10):
+            t = threading.Thread(target=lambda: db.connection())
+            t.start()
+            t.join()
+
+    run_workers()
+    gc.collect()
+    assert len(db._all) == initial_count

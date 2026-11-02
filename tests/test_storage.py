@@ -181,6 +181,39 @@ def test_severity_only_escalates(db):
     assert a.severity == "critical"
 
 
+def test_upsert_escalates_severity_and_details_with_same_evidence(db):
+    a1, created1 = st.upsert_alert(
+        db,
+        alert(ids=(1, 2), severity="low"),
+        cooldown_seconds=300,
+        now=NOW,
+    )
+    assert created1 and a1.severity == "low"
+
+    # Re-evaluating same evidence with escalated severity and new explanation
+    a2, created2 = st.upsert_alert(
+        db,
+        alert(ids=(1, 2), severity="critical"),
+        cooldown_seconds=300,
+        now=NOW + timedelta(seconds=10),
+    )
+    assert not created2 and a2.id == a1.id
+    assert a2.severity == "critical"
+    assert a2.count == 2  # count must not increment since no new evidence was added
+    assert a2.updated_at > a1.updated_at
+
+    # De-escalation attempt with same evidence should not change severity or updated_at
+    a3, created3 = st.upsert_alert(
+        db,
+        alert(ids=(1, 2), severity="medium"),
+        cooldown_seconds=300,
+        now=NOW + timedelta(seconds=20),
+    )
+    assert not created3 and a3.severity == "critical"
+    assert a3.count == 2
+    assert a3.updated_at == a2.updated_at
+
+
 def test_closed_alerts_do_not_absorb_new_activity(db):
     a, _ = st.upsert_alert(db, alert(ids=(1,)), cooldown_seconds=300, now=NOW)
     st.update_alert_status(db, a.id, AlertUpdate(status="resolved"), now=NOW)
@@ -195,6 +228,33 @@ def test_evidence_list_is_capped_but_count_is_true(db):
     st.upsert_alert(db, alert(ids=range(1, 151)), cooldown_seconds=300, now=NOW)
     a, _ = st.upsert_alert(db, alert(ids=range(151, 301)), cooldown_seconds=300, now=NOW)
     assert a.count == 300 and len(a.evidence_event_ids) == 200 and a.evidence_event_ids[-1] == 300
+
+
+def test_upsert_with_sliding_window_over_cap_does_not_inflate_count(db):
+    # Initial alert filled to MAX_EVIDENCE_IDS (200 events)
+    a1, created = st.upsert_alert(db, alert(ids=range(1, 201)), cooldown_seconds=300, now=NOW)
+    assert created and a1.count == 200
+
+    # Sliding window detector fires with event 201 added (window still has 1..201)
+    a2, _ = st.upsert_alert(db, alert(ids=range(1, 202)), cooldown_seconds=300, now=NOW + timedelta(seconds=1))
+    assert a2.count == 201
+    assert a2.evidence_event_ids == list(range(2, 202))
+
+    # Event 202 added: window has 1..202
+    a3, _ = st.upsert_alert(db, alert(ids=range(1, 203)), cooldown_seconds=300, now=NOW + timedelta(seconds=2))
+    assert a3.count == 202
+    assert a3.evidence_event_ids == list(range(3, 203))
+
+    # Event 203 added: window has 1..203
+    a4, _ = st.upsert_alert(db, alert(ids=range(1, 204)), cooldown_seconds=300, now=NOW + timedelta(seconds=3))
+    assert a4.count == 203
+    assert a4.evidence_event_ids == list(range(4, 204))
+
+    # Same window repeated with no new events: must not increment count or alter ordering
+    a5, created = st.upsert_alert(db, alert(ids=range(1, 204)), cooldown_seconds=300, now=NOW + timedelta(seconds=4))
+    assert not created
+    assert a5.count == 203
+    assert a5.evidence_event_ids == list(range(4, 204))
 
 
 def test_update_status_persists_and_missing_returns_none(db):
@@ -277,6 +337,12 @@ def test_purge_rejects_nonpositive_retention(db):
     for bad in (0, -1):
         with pytest.raises(ValueError):
             st.purge_old_events(db, bad)
+
+
+def test_purge_rejects_nonpositive_chunk_size(db):
+    for bad in (0, -1, -50):
+        with pytest.raises(ValueError, match="chunk_size must be positive"):
+            st.purge_old_events(db, 30, chunk_size=bad)
 
 
 def test_purge_keeps_alerts(db):

@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from app.ratelimit import SlidingWindowLimiter
+from backend.ratelimit import SlidingWindowLimiter
 
 
 class FakeClock:
