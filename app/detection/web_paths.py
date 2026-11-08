@@ -61,7 +61,7 @@ from functools import lru_cache
 from typing import Any
 from urllib.parse import unquote
 
-from backend.models import MAX_EXPLANATION_BYTES, MAX_TITLE_LEN, SEVERITIES, SEVERITY_RANK, AlertIn
+from app.models import MAX_EXPLANATION_BYTES, MAX_TITLE_LEN, SEVERITIES, SEVERITY_RANK, AlertIn
 
 logger = logging.getLogger(__name__)
 

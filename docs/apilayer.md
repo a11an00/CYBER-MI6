@@ -1,120 +1,83 @@
-# API Layer (Macharia)
+# The HTTP layer (`backend/`)
 
-This documents the API layer I've written for CYBER-MI6: the settings, the API key check, the rate limiter, the WebSocket manager, and the app skeleton. It covers what each file does, how to test it, and what's still to come.
+How the API is built, how to test it, and what is still open. The core logic it calls (storage, detection, users, settings) lives in `app/`; see [ARCHITECTURE.md](ARCHITECTURE.md) for the whole picture and [BACKEND_SPEC.md](BACKEND_SPEC.md) for the endpoint reference.
+
+`backend/` imports `app/`, never the other way round. Add a new endpoint here; add new logic in `app/` and call it from the route.
 
 ## Status
 
-| Component | File | Status |
+| Component | File | State |
 |---|---|---|
-| Settings | `app/config.py`, `.env.example` | Merged |
-| API key check | `app/security.py` | Merged |
-| Rate limiter | `app/ratelimit.py` | Merged |
-| WebSocket manager | `app/routes/ws.py` | Merged |
-| App factory, error format, static mount | `app/main.py` | Merged (startup fix in review) |
-| Dependency helpers | `app/deps.py` | Merged with `main.py` |
-| Events route | `app/routes/events.py` | Not started |
-| Alerts route | `app/routes/alerts.py` | Not started |
-| Stats route | `app/routes/stats.py` | Not started |
-
-Routes for events, alerts, and stats depend on Lee's data layer (`db.py`, `storage.py`, `models.py`), which is not yet on `main`.
+| App factory, error format, CORS, static files, startup and retention job | `backend/main.py` | Done |
+| Dependency helpers (database, rate limiters) | `backend/deps.py` | Done |
+| Ingestion API key check | `backend/security.py` | Done |
+| Sliding-window rate limiter | `backend/ratelimit.py` | Done |
+| Login: JWT creation, `require_user`, `require_admin`, WebSocket handshake | `backend/auth.py` | Done |
+| `POST /api/events`, `GET /api/events` | `backend/routes/events.py` | Done |
+| `GET /api/alerts`, `GET`/`PATCH /api/alerts/{id}` | `backend/routes/alerts.py` | Done |
+| `GET /api/stats` | `backend/routes/stats.py` | Done |
+| `POST /api/token` | `backend/routes/auth.py` | Done |
+| `/api/users*` (admin only) | `backend/routes/users.py` | Done |
+| `/ws` and the connection manager | `backend/routes/websocket.py` | Done |
+| `/api/blocklist` (record only) | `backend/routes/blocklist.py` | Done |
 
 ## Files
 
-### `app/config.py`
+### `main.py`
+`create_app()` builds the FastAPI app. It opens the database and starts the hourly retention job in the lifespan, returns every error as `{"error": ..., "detail": ...}`, adds CORS only when `ALLOWED_ORIGINS` is set, and mounts the built frontend last so it cannot hide API routes. A new router must be included before the static mount. It logs a warning at startup when `JWT_SECRET` is empty.
 
-Loads settings from environment variables and `.env`, using the names in the handbook. Every field has a default, so the app can be imported without a `.env` file.
+### `security.py`
+`require_api_key` reads `X-API-Key` and compares it to `API_KEY` in constant time. Missing or wrong key: 401. `API_KEY` not configured: 503. Used only by `POST /api/events`.
 
-- `API_KEY`: the key that sensors and apps send. Empty means ingestion is disabled.
-- `DATABASE_PATH`, `EVENT_RETENTION_DAYS`: storage settings.
-- `INGEST_MAX_BATCH`, `INGEST_RATE_LIMIT`, `INGEST_RATE_WINDOW_SECONDS`: ingestion limits.
-- `PORT_SCAN_*`, `DNS_*`, `AUTH_FAIL_*`, `ALERT_COOLDOWN_SECONDS`: detection thresholds, read by the detection engine.
-- `ALLOWED_ORIGINS`: comma-separated list for CORS.
+### `ratelimit.py`
+`SlidingWindowLimiter` allows a fixed number of calls per key (the client IP) in a time window. Thread-safe. Two instances exist: ingestion and login. Idle keys are never removed, and behind a reverse proxy every client shares one address (both listed in [FUTURE_CHANGES.md](FUTURE_CHANGES.md)).
 
-`get_settings()` is cached. Tests clear the cache when they change settings.
+### `auth.py`
+- `create_access_token` signs a JWT (HS256) holding the user id, issuer, issued-at and expiry.
+- `require_user` is the dependency for every dashboard route. It rejects a missing, malformed, expired or wrongly signed token, then loads the user and rejects unknown or disabled accounts. No `JWT_SECRET`: 503.
+- `require_admin` adds the admin role check (403).
+- `authenticate_websocket` runs the first-message handshake on `/ws` and closes the socket with code 4401 on any failure.
+- `to_profile` is the only way a user leaves the API: it strips the password hash.
 
-### `app/security.py`
+### `routes/events.py`
+`POST /api/events` runs the rate limit, then the API key, then validation (one event or `{"events": [...]}`), enforces `INGEST_MAX_BATCH`, stores the events, runs detection, and broadcasts. Storage and detection run in a worker thread so the server stays responsive. If detection raises, the events stay stored and the request still succeeds (a retry would create duplicates). An alert updated several times by one batch is broadcast once, in its final state. `GET /api/events` maps `from`/`to` onto the storage `since`/`until` arguments.
 
-`require_api_key` is a FastAPI dependency. It reads the `X-API-Key` header and compares it with `API_KEY` using a constant-time check.
+### `routes/alerts.py`, `routes/stats.py`
+Thin wrappers over `app/storage.py`. Unknown filter values are 422; an unknown alert id is 404.
 
-- Missing or wrong key: **401**
-- `API_KEY` not configured: **503**
+### `routes/blocklist.py`
+List, add and remove blocked addresses, matching the contract in `frontend/src/lib/api/client.ts`. Addresses are validated and stored in canonical form; adding one twice is idempotent; each entry records who added it (`blocked_by`). **Record only**: no other code reads this list.
 
-### `app/ratelimit.py`
+### `routes/auth.py`, `routes/users.py`
+Login (`POST /api/token`) and admin user management. Login rate limits per IP, always runs one argon2 verification even for an unknown username, and gives one error for every failure. User routes ignore client-supplied `permissions` and refuse to remove the last active admin.
 
-`SlidingWindowLimiter` allows a fixed number of calls per key (the client IP) within a time window. It's thread-safe, because FastAPI runs synchronous dependencies in a thread pool.
-
-Known limitations:
-- It keeps an entry for every IP it has seen and never removes idle ones.
-- Behind a reverse proxy, every request shares one IP, so the limit applies to everyone at once.
-
-### `app/routes/ws.py`
-
-The `/ws` endpoint and `ConnectionManager`.
-
-- `connect` and `disconnect` track live clients.
-- `broadcast` sends a message to every client. A client that fails or takes longer than two seconds to accept a message is removed, so it can't hold up the others.
-- `broadcast_event(event)` and `broadcast_alert(alert)` send messages in the format the dashboard expects:
-
-```json
-{"kind": "event", "data": { ... }}
-{"kind": "alert", "data": { ... }}
-```
-
-### `app/deps.py`
-
-`get_db` and `get_ingest_limiter` return the database and rate limiter that the app stores on `app.state` at startup. Routes use these through `Depends`, so tests can replace them.
-
-### `app/main.py`
-
-`create_app()` builds the FastAPI app. It:
-
-- opens the database and starts the hourly retention job in the lifespan,
-- returns every error as `{"error": ..., "detail": ...}`,
-- adds CORS only when `ALLOWED_ORIGINS` is set,
-- mounts the frontend's static files last, so they can't hide API routes.
-
-The database, storage, and retention imports are inside the functions that use them, so `main.py` loads before the data layer is merged. Move them to the top of the file once `db.py` is on `main`.
-
-Any new router must be included before the static mount.
+### `routes/websocket.py`
+`ConnectionManager` tracks live clients; `broadcast` drops any client that fails or takes more than two seconds, so one slow browser cannot hold up the rest. Sockets join the manager only after authenticating.
 
 ## Tests
 
-Tests are in `tests/`. Run them from the folder that contains `pytest.ini`:
+Run from the folder that contains `pytest.ini`:
 
 ```bash
-pytest -q
+python -m pytest -q
 ```
 
-Current result: **230 passed, 1 skipped**. The skipped test checks that startup creates the database file, and it runs once `app/db.py` is merged.
+Tests never touch the real `data/` folder. Route tests start the whole app on a temporary database through the `api` (logged in as an analyst) and `anon` (not logged in) fixtures in `tests/conftest.py`.
 
 | File | What it checks |
 |---|---|
-| `test_auth.py` | 401 for missing or wrong key, 200 for correct key, 503 when unconfigured, non-ASCII key returns 401 |
-| `test_ratelimit.py` | Limits per key, recovery after the window, expiry of old hits, thread safety under 500 concurrent calls |
-| `test_ws.py` | Connect and disconnect counts, broadcast to multiple clients, 50 connect-and-disconnect cycles, dropping broken and slow clients |
-| `test_app.py` | `/docs` loads, unknown API paths return the standard error shape, validation errors return 422 in that shape |
+| `test_routes_events.py`, `test_routes_alerts_stats.py`, `test_routes_blocklist.py` | Every events, alerts, stats and blocklist route: success, validation, 401/404/413/422/429/503, broadcasting |
+| `test_auth_routes.py`, `test_passwords.py` | Login, token tampering, route protection, user administration, last-admin rule, WebSocket handshake |
+| `test_detectors_via_api.py` | Each of the four rules, end to end through the HTTP API |
+| `test_demo_tool.py` | The demo generator against a real server |
+| `test_architecture.py` | `app/` never imports `backend/` or a web framework |
+| `test_auth.py`, `test_ratelimit.py`, `test_ws.py`, `test_app.py` | API key, rate limiter, WebSocket transport, app skeleton |
+| `tests/e2e_browser/run.py` | Not part of pytest. Starts the backend and drives the real dashboard in headless Chrome: login, live WebSocket updates, alert detail, status change, blocklist, admin page, logout (23 checks) |
+| `test_perf.py` | Window queries stay fast with 100,000 events (each mutating test uses its own copy of the data) |
+| other `test_*.py` | Core: models, database, storage, detection rules, concurrency |
 
-Tests never use the real `data/` folder. Database tests use a temporary file.
-
-## Blocked
-
-- **Server startup:** the lifespan opens the database, so `uvicorn` fails until `app/db.py` is on `main`. The error is `No module named 'app.db'`.
-- **Events, alerts, and stats routes:** these call storage functions, so they can't be finished until the data layer is merged.
-- **Dashboard data:** the frontend can load once the server starts, but live data needs the routes above.
-
-## Next
-
-1. Confirm the folder layout with the team. Import paths depend on the `app` package being importable from where the server runs.
-2. Once `db.py`, `models.py`, and `storage.py` are on `main`, pull `main`, start the server, and run the tests. Turn on the skipped startup test.
-3. Build `routes/events.py`: `POST /api/events` with the API key, batch limit, rate limit, and broadcast, then `GET /api/events` with filters.
-4. Build `routes/alerts.py`: list, detail, and status changes with the transition rules.
-5. Build `routes/stats.py`.
-6. Replace the literal batch limit in `config.py` with `models.MAX_BATCH_SIZE`.
-7. Make the PATCH status change atomic by running the check and write inside one database transaction.
+The suite passes in random order (`pytest-randomly`).
 
 ## Known issues
 
-- **Batch limit:** `config.py` hard-codes 500 to match `models.MAX_BATCH_SIZE`. Switch to the import once `models.py` is merged.
-- **Rate limiter memory:** idle IP entries are never removed. Acceptable for a small network, but it needs a cleanup pass.
-- **Rate limiting behind a proxy:** all clients share one address behind a proxy. Read the real client address from a trusted proxy header if deployment changes.
-- **Test deprecation warning:** `starlette`'s test client warns about `httpx`. The tests still pass.
+See [FUTURE_CHANGES.md](FUTURE_CHANGES.md). The main ones: rate limits behind a proxy, request-counted ingestion limit, tokens that cannot be revoked individually, a WebSocket that is authorised only when it connects.

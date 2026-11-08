@@ -13,7 +13,7 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Any
 
-from backend.models import MAX_EXPLANATION_BYTES
+from app.models import MAX_EXPLANATION_BYTES
 
 log = logging.getLogger(__name__)
 

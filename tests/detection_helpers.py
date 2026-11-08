@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from backend.models import Event, EventIn
+from app.models import Event, EventIn
 
 T0 = datetime(2026, 10, 1, 12, 0, 0, tzinfo=timezone.utc)  # fixed, safely in the past
 

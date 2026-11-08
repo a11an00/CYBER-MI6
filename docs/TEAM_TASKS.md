@@ -4,9 +4,9 @@
 
 | # | Role | Side | Owns |
 |---|---|---|---|
-| 1 | API and Storage Lead | Backend | `backend/` (main, models, db, storage, routes, websocket), `.env.example`, `requirements.txt` |
+| 1 | API and Storage Lead | Backend | `backend/` (HTTP API: main, auth, routes, websocket), `app/` (core: models, db, storage, config), `.env.example`, `requirements.txt` |
 | 2 | Sensor Engineer | Backend | `collectors/scapy_collector.py`, `sensor/` |
-| 3 | Detection Engineer | Backend | `backend/detection/` and detection tests |
+| 3 | Detection Engineer | Backend | `app/detection/` and detection tests |
 | 4 | Integration and Test Engineer | Backend | `tools/`, `examples/`, `tests/`, sample web app for testing |
 | 5 | Dashboard Lead | Frontend | `frontend/` (Svelte components, views, lib) |
 | 6 | UI/UX and Documentation | Frontend | Canva designs, `frontend/src/styles/`, `docs/`, README, demo and slides |
@@ -15,14 +15,17 @@
 
 ## Member 1: API and Storage Lead (Backend)
 **Goal:** a stable ingestion API and data layer everyone builds on.
-- [ ] Set up repo, `requirements.txt`, `.env.example`, `.gitignore`, and the folder structure
-- [ ] Define Pydantic models for events, alerts, and updates in `models.py` (agree on fields with the team in week 1)
-- [ ] Create SQLite tables, indexes, and WAL mode in `db.py`; write insert/query functions in `storage.py`
-- [ ] Implement `POST /api/events` with validation, size limits, and API key check
-- [ ] Implement `GET /api/events`, `GET /api/alerts`, `GET /api/alerts/{id}`, `PATCH /api/alerts/{id}`, `GET /api/stats`
-- [ ] Implement the WebSocket endpoint and connection manager; broadcast new events and alerts
-- [ ] Call the detection engine after each stored event and save/broadcast the alerts it returns
-- [ ] Add rate limiting on ingestion and an event retention cleanup job
+- [x] Set up repo, `requirements.txt`, `.env.example`, `.gitignore`, and the folder structure
+- [x] Define Pydantic models for events, alerts, and updates in `models.py` (agree on fields with the team in week 1)
+- [x] Create SQLite tables, indexes, and WAL mode in `db.py`; write insert/query functions in `storage.py`
+- [x] Implement `POST /api/events` with validation, size limits, and API key check
+- [x] Implement `GET /api/events`, `GET /api/alerts`, `GET /api/alerts/{id}`, `PATCH /api/alerts/{id}`, `GET /api/stats`
+- [x] Implement the WebSocket endpoint and connection manager; broadcast new events and alerts
+- [x] Call the detection engine after each stored event and save/broadcast the alerts it returns
+- [x] Add rate limiting on ingestion and an event retention cleanup job
+- [x] Added in November: dashboard login (argon2id + JWT), admin-only user management, authenticated WebSocket, `app/` + `backend/` split (see `docs/ARCHITECTURE.md`)
+- [ ] Setup script for macOS, Windows and Linux (installs dependencies, creates `.env` secrets, runs `python -m app.manage create-admin`)
+- [x] Blocklist: record-only endpoints (`/api/blocklist`); enforcement is not built
 - **Deliverable:** by end of week 1–2, a running API with `/docs` and demo data so frontend and detection can start.
 
 ## Member 2: Sensor Engineer (Backend)
@@ -39,23 +42,23 @@
 
 ## Member 3: Detection Engineer (Backend)
 **Goal:** explainable, tunable rules.
-- [ ] Build `engine.py`: receive a new event, run relevant rules against recent events, create or update alerts, deduplicate with a cooldown
-- [ ] Implement `portscan.py` (distinct ports per source in a time window)
-- [ ] Implement `dns_anomaly.py` (label length and Shannon entropy)
-- [ ] Implement `auth_failures.py` (failures per IP or username in a window)
-- [ ] Implement `web_paths.py` (pattern list for traversal, sensitive files, admin panels, injection fragments)
-- [ ] Put all thresholds and patterns in config so they can be tuned without code changes
-- [ ] Store the explanation (rule, thresholds, counts) and evidence event IDs in every alert
-- [ ] Write unit tests: each rule has a should-fire case and a should-not-fire case
-- [ ] Document each rule, its thresholds, and known false positives in `docs/ARCHITECTURE.md`
+- [x] Build `engine.py`: receive a new event, run relevant rules against recent events, create or update alerts, deduplicate with a cooldown
+- [x] Implement `portscan.py` (distinct ports per source in a time window)
+- [x] Implement `dns_anomaly.py` (label length and Shannon entropy)
+- [x] Implement `auth_failures.py` (failures per IP or username in a window)
+- [x] Implement `web_paths.py` (pattern list for traversal, sensitive files, admin panels, injection fragments)
+- [x] Put all thresholds and patterns in config so they can be tuned without code changes
+- [x] Store the explanation (rule, thresholds, counts) and evidence event IDs in every alert
+- [x] Write unit tests: each rule has a should-fire case and a should-not-fire case
+- [x] Document each rule, its thresholds, and known false positives (`docs/DETECTION_RULES_SECTION.md`)
 - **Deliverable:** four working rules with tests by week 4; tuned thresholds by week 6.
 
 ## Member 4: Integration and Test Engineer (Backend)
 **Goal:** safe, repeatable testing and the web app event source.
-- [ ] Build `tools/send_demo_events.py`: normal traffic plus scenarios (port scan, long DNS label, repeated login failures, suspicious paths) with options for rate and scenario
+- [x] Build `tools/send_demo_events.py`: normal traffic plus scenarios (port scan, long DNS label, repeated login failures, suspicious paths) with options for rate and scenario
 - [ ] Build `examples/webapp_event_reporting.py`: a helper that reports auth failures and HTTP metadata without blocking the app and with path redaction
 - [ ] Build a tiny team-owned test web app (login form plus a few routes) that uses the helper
-- [ ] Write API tests (valid, invalid, oversized, missing key) and end-to-end tests: event in, alert out, WebSocket message received
+- [x] Write API tests (valid, invalid, oversized, missing key) and end-to-end tests: event in, alert out, WebSocket message received
 - [ ] Set up CI (GitHub Actions) to run lint and tests
 - [ ] Create the final demo scenario script for the presentation
 - [ ] Track false positives from real test runs and feed them to Member 3
@@ -130,12 +133,14 @@ About 8 weeks. The MVP is demonstrable by week 5.
 
 ## MVP acceptance checklist
 
-- [ ] `POST /api/events` validates and stores events; bad input returns a clear error
-- [ ] A simulated port scan creates a "possible port scan" alert
-- [ ] A long or high-entropy DNS label creates a DNS anomaly alert
-- [ ] Repeated login failures on the test web app create an alert
-- [ ] A suspicious path request creates a web path alert
+- [x] `POST /api/events` validates and stores events; bad input returns a clear error
+- [x] A simulated port scan creates a "possible port scan" alert
+- [x] A long or high-entropy DNS label creates a DNS anomaly alert
+- [x] Repeated login failures create an alert (proved through the API; the test web app is not built yet)
+- [x] A suspicious path request creates a web path alert
 - [ ] Alerts and events appear live on the dashboard without refreshing
 - [ ] An alert's status can be changed from the dashboard and persists
 - [ ] The sensor runs on both Windows and Linux without storing payloads
-- [ ] Requests without a valid API key are rejected
+- [x] Requests without a valid API key are rejected
+
+*Not ticked because no test covers them yet: live updates in the browser, changing an alert's status from the dashboard, and the sensor on Windows and Linux.*

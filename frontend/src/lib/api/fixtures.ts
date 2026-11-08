@@ -5,7 +5,7 @@
  * frame's stat tiles: 41 alerts (5 critical, 9 high, 18 medium, 9 low) and
  * 23 open (14 new, 9 investigating).
  *
- * Every object follows backend/models.py: e.g. auth_failure events carry only
+ * Every object follows app/models.py: e.g. auth_failure events carry only
  * `username`, never HTTP fields (the model rejects them).
  */
 import type { Alert, AlertStatus, Event, Severity } from '../types';

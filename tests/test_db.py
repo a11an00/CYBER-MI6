@@ -3,7 +3,7 @@ import threading
 
 import pytest
 
-from backend.db import Database, from_db_ts, open_database, to_db_ts
+from app.db import SCHEMA_VERSION, Database, from_db_ts, open_database, to_db_ts
 from tests.conftest import NOW
 
 
@@ -12,13 +12,13 @@ def test_wal_mode_and_pragmas(db):
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
 
 def test_tables_and_required_indexes_exist(db):
     conn = db.connection()
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-    assert {"events", "alerts"} <= tables
+    assert {"events", "alerts", "users"} <= tables
     indexes = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='index'")}
     assert {"idx_events_timestamp", "idx_events_type_ts", "idx_events_src_type_ts"} <= indexes
 
@@ -141,3 +141,29 @@ def test_connections_cleaned_up_when_threads_exit(db):
     run_workers()
     gc.collect()
     assert len(db._all) == initial_count
+
+
+
+def test_v1_database_is_upgraded_in_place_and_keeps_data(tmp_path):
+    # A database created before the users table existed (schema v1) must open, gain the
+    # table, keep its rows and report the new version.
+    path = tmp_path / "old.db"
+    raw = sqlite3.connect(path)
+    raw.execute("CREATE TABLE alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, "
+                "updated_at TEXT NOT NULL, rule TEXT NOT NULL, severity TEXT NOT NULL, title TEXT NOT NULL, "
+                "status TEXT NOT NULL DEFAULT 'new', src_ip TEXT, evidence_event_ids TEXT NOT NULL DEFAULT '[]', "
+                "count INTEGER NOT NULL DEFAULT 1, explanation TEXT NOT NULL DEFAULT '{}')")
+    raw.execute("INSERT INTO alerts (created_at, updated_at, rule, severity, title) "
+                "VALUES ('2026-01-01T00:00:00.000000Z', '2026-01-01T00:00:00.000000Z', 'port_scan', 'low', 't')")
+    raw.execute("PRAGMA user_version = 1")
+    raw.commit()
+    raw.close()
+
+    database = open_database(path)
+    try:
+        conn = database.connection()
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+        assert conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+    finally:
+        database.close()

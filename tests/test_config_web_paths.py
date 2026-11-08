@@ -1,4 +1,4 @@
-"""Checks that backend/config.py and backend/detection/web_paths.py work together."""
+"""Checks that app/config.py and app/detection/web_paths.py work together."""
 
 import json
 from datetime import datetime, timezone
@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from backend.config import Settings, _load_web_path_patterns
-from backend.detection.web_paths import DEFAULT_WEB_PATH_PATTERNS, evaluate
-from backend.models import Event
+from app.config import Settings, _load_web_path_patterns
+from app.detection.web_paths import DEFAULT_WEB_PATH_PATTERNS, evaluate
+from app.models import Event
 
 NOW = datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc)
 

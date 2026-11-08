@@ -3,7 +3,7 @@
 import threading
 from datetime import timedelta
 
-from backend import storage as st
+from app import storage as st
 from tests.conftest import NOW, alert, ago, syn
 
 
@@ -93,7 +93,7 @@ def test_writes_during_purge_are_not_lost(db):
 
 def test_status_update_races_with_dedup(db):
     a, _ = st.upsert_alert(db, alert(ids=(1,)), cooldown_seconds=300, now=NOW)
-    from backend.models import AlertUpdate
+    from app.models import AlertUpdate
 
     def resolve():
         st.update_alert_status(db, a.id, AlertUpdate(status="resolved"), now=NOW)

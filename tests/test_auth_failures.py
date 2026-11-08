@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.detection import auth_failures
-from backend.detection.auth_failures import RULE_NAME, evaluate, history_query
-from backend.models import MAX_EXPLANATION_BYTES, MAX_TITLE_LEN, AlertIn
+from app.detection import auth_failures
+from app.detection.auth_failures import RULE_NAME, evaluate, history_query
+from app.models import MAX_EXPLANATION_BYTES, MAX_TITLE_LEN, AlertIn
 from tests.detection_helpers import at, login_fail, syn, with_ids
 
 S = SimpleNamespace(auth_fail_count=5, auth_fail_window_seconds=300)

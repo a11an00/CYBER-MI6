@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { auth } from '../lib/auth';
   import { relativeTime } from '../lib/format';
   import { href } from '../lib/router';
+  import Button from './Button.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
 
   // Matches the Figma "Connection Indicator" component. Wired to the
@@ -50,6 +52,13 @@
       <span class="dot" aria-hidden="true"></span>{labels[connection]}
     </p>
     <ThemeToggle />
+    {#if $auth.user}
+      <div class="account">
+        <span class="who">{$auth.user.username}</span>
+        {#if $auth.user.role === 'admin'}<a class="admin-link" href={href.admin}>Users</a>{/if}
+        <Button variant="ghost" onclick={() => auth.logout()}>Log out</Button>
+      </div>
+    {/if}
   </div>
 </header>
 
@@ -119,7 +128,27 @@
   [data-state='offline'] .dot {
     background: var(--color-connection-offline);
   }
+  .account {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+  }
+  .who {
+    font: var(--text-body-small);
+    color: var(--color-text-secondary);
+  }
+  .admin-link {
+    font: var(--text-body-small);
+    color: var(--color-accent-text);
+    text-decoration: none;
+  }
+  .admin-link:hover {
+    text-decoration: underline;
+  }
   @media (max-width: 640px) {
+    .who {
+      display: none;
+    }
     .app-header {
       min-height: 52px;
       padding: var(--spacing-sm) var(--spacing-lg);

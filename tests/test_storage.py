@@ -2,8 +2,8 @@ from datetime import timedelta
 
 import pytest
 
-from backend import storage as st
-from backend.models import AlertUpdate
+from app import storage as st
+from app.models import AlertUpdate
 from tests.conftest import NOW, ago, alert, auth, dns, http, syn
 
 

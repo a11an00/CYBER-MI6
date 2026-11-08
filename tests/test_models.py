@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.models import AlertIn, AlertUpdate, EventBatch, EventIn, MAX_BATCH_SIZE
+from app.models import AlertIn, AlertUpdate, EventBatch, EventIn, MAX_BATCH_SIZE
 
 BASE = {"type": "network_connection", "timestamp": "2026-10-19T09:15:02Z", "source": "laptop-sensor-1",
         "src_ip": "192.168.1.25", "dst_ip": "192.168.1.1", "dst_port": 445, "protocol": "tcp"}

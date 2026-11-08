@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 
-from backend.config import get_settings
+from app.config import get_settings
 from backend.main import create_app
 
 

@@ -75,14 +75,14 @@
   {#if entry}
     <p class="blocked" role="status">
       <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></svg>
-      <span><span class="ip">{ip}</span> is blocked · since {clockTime(entry.blocked_at)}</span>
+      <span><span class="ip">{ip}</span> is on the blocklist · since {clockTime(entry.blocked_at)}</span>
     </p>
-    <Button variant="ghost" disabled={busy} onclick={unblock}>{busy ? 'Unblocking…' : 'Unblock'}</Button>
+    <Button variant="ghost" disabled={busy} onclick={unblock}>{busy ? 'Removing…' : 'Remove from blocklist'}</Button>
   {:else if confirming}
     <div class="confirm" role="alertdialog" aria-labelledby="block-ip-question" aria-describedby="block-ip-detail">
       <p id="block-ip-question" class="question">Block <span class="ip">{ip}</span>?</p>
       <p id="block-ip-detail" class="detail">
-        New traffic from this address will be refused. The alert and its evidence are kept, and you can unblock it later.
+        This adds the address to the blocklist so the team can see it. Nothing is blocked automatically yet. The alert and its evidence are kept, and you can remove it later.
       </p>
       <div class="buttons">
         <Button variant="danger" disabled={busy} onclick={confirmBlock}>

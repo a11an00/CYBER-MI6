@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.routes import websocket as ws_module
-from backend.routes.websocket import ConnectionManager, broadcast_event, router
+from backend.routes.websocket import ConnectionManager, broadcast_event, get_ws_authenticator, router
 
 
 def wait_until(condition, timeout: float = 2.0) -> bool:
@@ -30,6 +30,13 @@ def clean_global_manager():
 def client():
     app = FastAPI()
     app.include_router(router)
+
+    # These tests are about the transport (counting, broadcasting, dropping dead sockets), not
+    # about login. The handshake itself is tested in test_auth_routes.py.
+    async def allow_everyone(ws) -> bool:
+        return True
+
+    app.dependency_overrides[get_ws_authenticator] = lambda: allow_everyone
 
     # Test-only route: lets a test trigger a broadcast from the server side.
     @app.post("/_test/broadcast")

@@ -1,11 +1,11 @@
 import type { Alert, Event } from './types';
 
 /**
- * "09:21:47". Times are shown in UTC, the same clock the backend stores
- * (handbook §6), so every analyst sees the same value for the same event.
+ * "09:21:47". Backend stores UTC; the browser converts to the analyst's local
+ * timezone so every analyst sees times that match their system clock.
  */
 export function clockTime(iso: string): string {
-  return new Date(iso).toISOString().slice(11, 19);
+  return new Date(iso).toLocaleTimeString('en-GB', { hour12: false });
 }
 
 /** "2s ago", "5 min ago", "3 h ago"; older than a day shows the date. */

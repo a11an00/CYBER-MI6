@@ -332,6 +332,16 @@ class Alert(AlertIn):
     count: int = 1
 
 
+class AlertDetail(Alert):
+    """Response of GET /api/alerts/{id}: the alert plus its evidence events.
+
+    Events already removed by retention are silently absent, so ``evidence`` can be
+    shorter than ``evidence_event_ids``.
+    """
+
+    evidence: list[Event] = Field(default_factory=list)
+
+
 class AlertUpdate(BaseModel):
     """Body of PATCH /api/alerts/{id}."""
 
@@ -355,3 +365,116 @@ class Stats(BaseModel):
     alerts_by_severity: dict[str, int]
     alerts_by_status: dict[str, int]
     top_source_ips: list[TopSource]
+
+
+# --------------------------------------------------------------------------
+# Users and login (dashboard accounts; sensors use the API key instead)
+# --------------------------------------------------------------------------
+Role = Literal["admin", "analyst"]
+UserStatus = Literal["active", "disabled"]
+ROLES: tuple[str, ...] = get_args(Role)
+
+MIN_PASSWORD_LEN = 12
+MAX_PASSWORD_LEN = 128  # argon2 handles long inputs, but unbounded input is a cheap DoS lever
+
+# Permissions are DERIVED from the role on the server and never read from a request body.
+_ANALYST_PERMISSIONS = ("alerts:read", "alerts:update", "events:read", "stats:read")
+ROLE_PERMISSIONS: dict[str, tuple[str, ...]] = {
+    "analyst": _ANALYST_PERMISSIONS,
+    "admin": _ANALYST_PERMISSIONS + ("users:manage",),
+}
+
+Username = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=3, max_length=64, pattern=r"^[A-Za-z0-9._@-]+$"),
+]
+NewPassword = Annotated[str, StringConstraints(min_length=MIN_PASSWORD_LEN, max_length=MAX_PASSWORD_LEN)]
+
+
+class LoginRequest(BaseModel):
+    """Body of POST /api/token. No length minimum here: login must never reveal the password policy."""
+
+    model_config = ConfigDict(extra="forbid")
+    username: Annotated[str, StringConstraints(min_length=1, max_length=64)]
+    password: Annotated[str, StringConstraints(min_length=1, max_length=1024)]
+
+
+class UserProfile(BaseModel):
+    """What the dashboard sees of a user. Field names match frontend/src/types/auth.ts
+    (note ``lastLogin`` is camelCase on the wire)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str
+    username: str
+    role: Role
+    permissions: list[str]
+    status: UserStatus
+    last_login: datetime | None = Field(default=None, serialization_alias="lastLogin")
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    user: UserProfile
+
+
+class UserCreate(BaseModel):
+    """POST /api/users. Unknown fields (the dashboard also sends ``permissions``) are ignored."""
+
+    model_config = ConfigDict(extra="ignore")
+    username: Username
+    password: NewPassword
+    role: Role = "analyst"
+    status: UserStatus = "active"
+
+
+class UserUpdate(BaseModel):
+    """PATCH /api/users/{id}. Every field optional. Unknown fields (``id``, ``permissions``,
+    ``lastLogin`` ...) are ignored, so a client cannot grant itself permissions."""
+
+    model_config = ConfigDict(extra="ignore")
+    username: Username | None = None
+    password: NewPassword | None = None
+    role: Role | None = None
+    status: UserStatus | None = None
+
+
+class UserStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: UserStatus
+
+
+# --------------------------------------------------------------------------
+# Blocklist (record only: nothing enforces it yet)
+# --------------------------------------------------------------------------
+def canonical_ip(value: str) -> str:
+    """Validate an IPv4/IPv6 address and return its canonical text form."""
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        raise ValueError(f"not a valid IP address: {value!r}") from None
+
+
+class BlockRequest(BaseModel):
+    """POST /api/blocklist."""
+
+    model_config = ConfigDict(extra="forbid")
+    ip: str
+    alert_id: int | None = Field(default=None, ge=1)
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+
+    @field_validator("ip")
+    @classmethod
+    def _valid_ip(cls, value: str) -> str:
+        return canonical_ip(value)
+
+
+class BlockedIp(BaseModel):
+    """Mirrors BlockedIp in frontend/src/lib/types.ts (``blocked_by`` is an addition)."""
+
+    ip: str
+    alert_id: int | None = None
+    reason: str | None = None
+    blocked_at: datetime
+    blocked_by: str

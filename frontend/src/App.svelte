@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import AppHeader from './components/AppHeader.svelte';
   import DevScenarioNotice from './components/DevScenarioNotice.svelte';
   import { displayedConnection, feed } from './lib/live';
   import { location } from './lib/router';
-  import { startLive } from './lib/ws';
+  import { startLive, stopLive } from './lib/ws';
   import { auth } from './lib/auth';
   
   import AlertDetail from './views/AlertDetail.svelte';
@@ -22,7 +23,7 @@
 
   onMount(() => {
     auth.init();
-    if ($auth.isAuthenticated) {
+    if (get(auth).isAuthenticated) {
       startLive();
     }
   });
@@ -30,11 +31,16 @@
   $effect(() => {
     if ($auth.isAuthenticated) {
       startLive();
+    } else {
+      stopLive(); // logged out: close the live socket instead of leaving it streaming
     }
   });
 </script>
 
-{#if !$auth.isAuthenticated}
+{#if !$auth.initialized}
+  <!-- auth.init() hasn't run yet — don't mount any views so they can't fire
+       unauthenticated requests before the token is loaded from localStorage. -->
+{:else if !$auth.isAuthenticated}
   <main class="auth-layout">
     <Login />
   </main>

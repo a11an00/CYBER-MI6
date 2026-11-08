@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.detection import portscan
-from backend.detection.portscan import RULE_NAME, evaluate, history_query
-from backend.models import MAX_EXPLANATION_BYTES, AlertIn
+from app.detection import portscan
+from app.detection.portscan import RULE_NAME, evaluate, history_query
+from app.models import MAX_EXPLANATION_BYTES, AlertIn
 from tests.detection_helpers import at, dns, scan, syn, with_ids
 
 S = SimpleNamespace(port_scan_ports=20, port_scan_window_seconds=30)

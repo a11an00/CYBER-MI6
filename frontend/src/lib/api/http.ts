@@ -5,6 +5,9 @@
  * state: `status` is the HTTP status, or 0 when the API could not be reached.
  */
 
+import { get } from 'svelte/store';
+import { auth } from '../auth';
+
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 export class ApiError extends Error {
@@ -73,12 +76,19 @@ export async function request<T>(
   const timeout = AbortSignal.timeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
 
+  // The API answers 401 without a valid login token (dashboard routes need one).
+  const token = get(auth).token;
+
   let response: Response;
   try {
     response = await fetch(path, {
       method,
       signal,
-      headers: { Accept: 'application/json', ...(options.body !== undefined && { 'Content-Type': 'application/json' }) },
+      headers: {
+        Accept: 'application/json',
+        ...(options.body !== undefined && { 'Content-Type': 'application/json' }),
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });
   } catch (err) {
@@ -89,6 +99,8 @@ export async function request<T>(
   }
 
   const body: unknown = await response.json().catch(() => null);
+  // An expired or revoked token (or a disabled account): back to the login screen.
+  if (response.status === 401 && token) auth.logout();
   if (!response.ok) {
     const message = detailMessage(body) ?? `${method} ${path} failed (${response.status})`;
     throw new ApiError(response.status, path, message, errorCode(body));

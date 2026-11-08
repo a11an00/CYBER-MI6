@@ -1,0 +1,12 @@
+{
+  "name": "cyber-mi6-e2e-browser",
+  "private": true,
+  "type": "module",
+  "description": "Drives the real dashboard in a real browser against a real backend (run with: python tests/e2e_browser/run.py)",
+  "dependencies": {
+    "puppeteer-core": "^25.16.0"
+  },
+  "optionalDependencies": {
+    "@sparticuz/chromium": "^153.0.0"
+  }
+}

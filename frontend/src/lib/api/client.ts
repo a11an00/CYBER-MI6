@@ -2,7 +2,7 @@
  * The data client every view uses. One interface, two implementations:
  *
  *   - httpClient: the real FastAPI endpoints (handbook §6)
- *   - mockClient: in-memory fixtures shaped exactly like backend/models.py
+ *   - mockClient: in-memory fixtures shaped exactly like app/models.py
  *
  * Which one runs is decided once, at build time (see `dataSource` below), so
  * views never know or care where data comes from.

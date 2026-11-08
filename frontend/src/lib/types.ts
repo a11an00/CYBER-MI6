@@ -1,5 +1,5 @@
 /**
- * API response shapes. These mirror backend/models.py exactly; when that file
+ * API response shapes. These mirror app/models.py exactly; when that file
  * changes, change this one in the same pull request.
  *
  * Datetimes arrive as ISO 8601 strings in UTC (Pydantic's JSON encoding).
@@ -15,7 +15,7 @@ export type EventType = (typeof EVENT_TYPES)[number];
 export type Severity = (typeof SEVERITIES)[number];
 export type AlertStatus = (typeof ALERT_STATUSES)[number];
 
-/** Rule names used by the detection engine (backend/detection/). */
+/** Rule names used by the detection engine (app/detection/). */
 export const RULES = ['port_scan', 'dns_anomaly', 'auth_failures', 'web_paths'] as const;
 export type Rule = (typeof RULES)[number];
 
@@ -101,7 +101,7 @@ export interface AlertFilters {
 }
 
 /**
- * PROPOSED: an IP on the blocklist. Not in backend/models.py yet; agree the
+ * PROPOSED: an IP on the blocklist. Not in app/models.py yet; agree the
  * shape with the API owner (see lib/api/client.ts, blocklist endpoints).
  */
 export interface BlockedIp {

@@ -9,8 +9,8 @@ from datetime import timedelta
 
 import pytest
 
-from backend import storage as st
-from backend.models import EventIn
+from app import storage as st
+from app.models import EventIn
 from tests.conftest import NOW
 
 N_EVENTS = 100_000
@@ -19,7 +19,7 @@ BUDGET_MS = 50  # per indexed window query; typical results are far below this
 
 @pytest.fixture(scope="module")
 def big_db(tmp_path_factory):
-    from backend.db import open_database
+    from app.db import open_database
 
     db = open_database(tmp_path_factory.mktemp("perf") / "perf.db")
     rng = random.Random(42)
@@ -49,6 +49,27 @@ def big_db(tmp_path_factory):
     st.insert_events(db, [EventIn(type="network_connection", timestamp=NOW - timedelta(seconds=p % 20),
                                   source="s", src_ip="192.168.9.9", dst_ip="10.0.0.1", dst_port=1000 + p)
                           for p in range(40)])
+    yield db
+    db.close()
+
+
+@pytest.fixture
+def big_db_copy(big_db, tmp_path):
+    """A private copy of the big database for tests that INSERT or DELETE.
+
+    ``big_db`` is built once per module (loading 100k events is slow) and shared, so tests
+    that change it would make every other test's numbers depend on the order they ran in.
+    """
+    import shutil
+
+    from app.db import open_database
+
+    conn = big_db.connection()
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")  # fold the WAL into the main file first
+    source = conn.execute("PRAGMA database_list").fetchone()[2]
+    target = tmp_path / "perf-copy.db"
+    shutil.copyfile(source, target)
+    db = open_database(target)
     yield db
     db.close()
 
@@ -128,24 +149,24 @@ def test_indexes_are_used_not_table_scans(big_db):
         assert "idx_events_" in p, f"{name}: {p}"
 
 
-def test_flood_window_worst_case(big_db):
+def test_flood_window_worst_case(big_db_copy):
     """A flood: 20k events from one IP in the same 30 s. Rules should use count_* here, not load rows."""
-    st.insert_events(big_db, [EventIn(type="network_connection", timestamp=NOW - timedelta(seconds=i % 30),
+    st.insert_events(big_db_copy, [EventIn(type="network_connection", timestamp=NOW - timedelta(seconds=i % 30),
                                       source="s", src_ip="172.16.0.99", dst_ip="10.0.0.1", dst_port=1 + i % 60000)
                               for i in range(20_000)])
     since = NOW - timedelta(seconds=30)
-    n, med, worst = timed(lambda: st.count_distinct(big_db, "dst_port", since=since, src_ip="172.16.0.99"), repeat=5)
+    n, med, worst = timed(lambda: st.count_distinct(big_db_copy, "dst_port", since=since, src_ip="172.16.0.99"), repeat=5)
     print(f"\n  FLOOD count_distinct over 20k rows     median {med:.1f} ms  worst {worst:.1f} ms  -> {n}")
     assert worst < 250
-    rows, med, worst = timed(lambda: st.events_in_window(big_db, since=since, src_ip="172.16.0.99"), repeat=3)
+    rows, med, worst = timed(lambda: st.events_in_window(big_db_copy, since=since, src_ip="172.16.0.99"), repeat=3)
     print(f"  FLOOD events_in_window loading {len(rows):,} rows median {med:.0f} ms  worst {worst:.0f} ms")
 
 
-def test_retention_on_big_table(big_db):
+def test_retention_on_big_table(big_db_copy):
     t = time.perf_counter()
-    removed = st.purge_old_events(big_db, 3, now=NOW)
+    removed = st.purge_old_events(big_db_copy, 3, now=NOW)
     ms = (time.perf_counter() - t) * 1000
-    remaining = st.count_events(big_db)
+    remaining = st.count_events(big_db_copy)
     print(f"\n  purge_old_events(3 days) removed {removed:,} rows in {ms:.0f} ms; {remaining:,} remain")
     assert removed > 0 and remaining > 0
-    assert st.count_events(big_db, until=NOW - timedelta(days=3, seconds=1)) == 0
+    assert st.count_events(big_db_copy, until=NOW - timedelta(days=3, seconds=1)) == 0

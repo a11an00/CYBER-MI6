@@ -1,0 +1,14 @@
+# Lint settings. Run: ruff check .
+line-length = 120
+target-version = "py311"
+extend-exclude = ["frontend", "web"]
+
+[lint]
+# E/W: pycodestyle, F: pyflakes (unused imports and names, undefined names), B: likely bugs
+select = ["E", "W", "F", "B"]
+ignore = [
+    "B008",  # FastAPI's Depends(...) / Query(...) as default argument is the framework's idiom
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["E501", "B011"]  # long lines in test tables; assert False is fine in tests

@@ -1,4 +1,4 @@
-"""Unit tests for backend/detection/web_paths.py.
+"""Unit tests for app/detection/web_paths.py.
 
 Uses the real models (Event / EventIn / AlertIn) so tests also prove that
 every candidate the rule produces is a valid AlertIn.
@@ -12,9 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.detection import web_paths
-from backend.detection.web_paths import DEFAULT_WEB_PATH_PATTERNS, RULE_NAME, evaluate, inspect_path, normalize_path
-from backend.models import MAX_EXPLANATION_BYTES, MAX_TITLE_LEN, AlertIn, Event, EventIn
+from app.detection import web_paths
+from app.detection.web_paths import DEFAULT_WEB_PATH_PATTERNS, RULE_NAME, evaluate, inspect_path, normalize_path
+from app.models import MAX_EXPLANATION_BYTES, MAX_TITLE_LEN, AlertIn, Event, EventIn
 
 NOW = datetime(2026, 10, 19, 9, 0, tzinfo=timezone.utc)
 
@@ -302,7 +302,7 @@ def test_settings_none_uses_defaults():
 # Defaults sanity
 # ---------------------------------------------------------------------------
 def test_default_patterns_are_all_valid_and_use_known_severities():
-    from backend.models import SEVERITIES
+    from app.models import SEVERITIES
     import re
     for name, cfg in DEFAULT_WEB_PATH_PATTERNS.items():
         assert cfg["severity"] in SEVERITIES, name

@@ -10,7 +10,9 @@
  * Messages are {"kind": "event" | "alert", "data": {...}} (app/routes/ws.py).
  * They come from the network, so anything not shaped like that is ignored.
  */
+import { get } from 'svelte/store';
 import { api, loadMockModule } from './api/client';
+import { auth } from './auth';
 import { notifyAlertsChanged } from './alerts';
 import { notifyEventsChanged } from './events';
 import { RETRY_SECONDS } from './health';
@@ -64,6 +66,8 @@ function handle(message: LiveMessage): void {
 }
 
 // --- connection state machine ---------------------------------------------
+
+const WS_CLOSE_UNAUTHORIZED = 4401; // backend/auth.py
 
 let started = false;
 let socket: WebSocket | null = null;
@@ -119,13 +123,29 @@ function connect(): void {
     onClose();
     return;
   }
-  socket.addEventListener('open', onOpen);
-  socket.addEventListener('message', (e) => {
+  const ws = socket;
+  ws.addEventListener('open', () => {
+    // Browsers cannot set headers on a WebSocket, and a token in the URL would end up in logs,
+    // so the login token is the first message. The server streams only after it checks out.
+    const token = get(auth).token;
+    if (token) ws.send(JSON.stringify({ type: 'auth', token }));
+    onOpen();
+  });
+  ws.addEventListener('message', (e) => {
     const message = parseMessage(e.data);
     if (message) handle(message);
   });
-  // An error is always followed by close; reconnect once, from close.
-  socket.addEventListener('close', onClose);
+  ws.addEventListener('close', (e) => {
+    // 4401 = the server refused our login token (expired, revoked, account disabled).
+    // Retrying with the same token would loop forever, so go back to the login screen.
+    if (e.code === WS_CLOSE_UNAUTHORIZED) {
+      stopLive();
+      auth.logout();
+      return;
+    }
+    // An error is always followed by close; reconnect once, from close.
+    onClose();
+  });
 }
 
 // --- polling fallback ------------------------------------------------------

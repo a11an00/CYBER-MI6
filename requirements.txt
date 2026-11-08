@@ -1,4 +1,4 @@
-# CYBER-MI6 requirements so far - covers models.py, db.py, storage.py and their tests.
+# CYBER-MI6 requirements: the API (backend/), the core (app/), the demo tool and the tests.
 # Python 3.11 or newer is required (db.py relies on datetime.fromisoformat accepting "Z").
 #
 # Tested with pydantic 2.13.5 and pytest 9 on Python 3.13. Lower bounds below are
@@ -9,6 +9,8 @@ pydantic>=2.5,<3
 fastapi>=0.110.0
 pydantic-settings>=2.0.0
 uvicorn[standard]>=0.28.0
+argon2-cffi>=25.1.0   # password hashing (argon2id)
+PyJWT>=2.7,<3         # dashboard login tokens
 
 # --- tests -----------------------------------------------------------------
 pytest>=8

@@ -1,7 +1,11 @@
 import asyncio
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from collections.abc import Awaitable, Callable
+
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+
+from backend.auth import authenticate_websocket
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -26,6 +30,10 @@ class ConnectionManager:
 
     async def connect(self, ws: WebSocket) -> None:
         await ws.accept()
+        self._connections.add(ws)
+
+    def register(self, ws: WebSocket) -> None:
+        """Start sending broadcasts to an already accepted (and authenticated) socket."""
         self._connections.add(ws)
 
     def disconnect(self, ws: WebSocket) -> None:
@@ -60,9 +68,21 @@ async def broadcast_alert(alert: dict) -> None:
     await manager.broadcast({"kind": "alert", "data": alert})
 
 
+Authenticator = Callable[[WebSocket], Awaitable[bool]]
+
+
+def get_ws_authenticator() -> Authenticator:
+    """A dependency so tests can swap the login check out (app.dependency_overrides)."""
+    return authenticate_websocket
+
+
 @router.websocket("/ws")
-async def websocket_endpoint(ws: WebSocket) -> None:
-    await manager.connect(ws)
+async def websocket_endpoint(ws: WebSocket, authenticate: Authenticator = Depends(get_ws_authenticator)) -> None:
+    await ws.accept()
+    # Not in the manager yet, so an unauthenticated socket never receives a broadcast.
+    if not await authenticate(ws):
+        return
+    manager.register(ws)
     try:
         # Clients don't send data. Waiting here is how we notice a disconnect.
         while True:

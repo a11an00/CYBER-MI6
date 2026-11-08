@@ -2,7 +2,7 @@ import secrets
 
 from fastapi import Depends, Header, HTTPException
 
-from backend.config import Settings, get_settings
+from app.config import Settings, get_settings
 
 
 def require_api_key(

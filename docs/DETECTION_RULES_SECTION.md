@@ -13,12 +13,12 @@ Rules are transparent: each alert states which rule fired, the threshold, the nu
 
 | Rule | File | How it works (default values) | Severity | Known false positives |
 |---|---|---|---|---|
-| **Possible port scan** (`port_scan`) | `backend/detection/portscan.py` | ≥ 20 distinct destination ports from one source IP within 30 s (sliding window, repeats of a port don't count) | medium at 20 ports, high at 100, critical at 1000 | Vulnerability scanners, service discovery, P2P/game clients. Slow scans below the threshold are missed |
-| **DNS anomaly** (`dns_anomaly`) | `backend/detection/dns_anomaly.py` | A label ≥ 40 characters, or Shannon entropy ≥ 3.8 bits/char on a label ≥ 16 characters | low for one indicator; medium if both, or a label over 63 characters | CDNs, tracking domains, cloud services with generated names. Random hex needs ≥ 40 characters to be caught (see below) |
-| **Repeated auth failures** (`auth_failures`) | `backend/detection/auth_failures.py` | ≥ 5 failures from one IP **or** against one username within 300 s | medium at 5, high at 15 (or one account attacked from ≥ 3 IPs), critical at 50 | A user who forgot their password; many users behind one NAT address |
-| **Suspicious web path** (`web_paths`) | `backend/detection/web_paths.py` | Pattern matching on the normalised request path (traversal, sensitive files, admin panels, SQL/script/command injection) | highest severity among matched categories | WordPress sites trigger `admin_panel_probe`; sites serving `.sql` downloads trigger `sensitive_file`. Query strings are removed before storage, so attacks only in `?x=` are invisible |
+| **Possible port scan** (`port_scan`) | `app/detection/portscan.py` | ≥ 20 distinct destination ports from one source IP within 30 s (sliding window, repeats of a port don't count) | medium at 20 ports, high at 100, critical at 1000 | Vulnerability scanners, service discovery, P2P/game clients. Slow scans below the threshold are missed |
+| **DNS anomaly** (`dns_anomaly`) | `app/detection/dns_anomaly.py` | A label ≥ 40 characters, or Shannon entropy ≥ 3.8 bits/char on a label ≥ 16 characters | low for one indicator; medium if both, or a label over 63 characters | CDNs, tracking domains, cloud services with generated names. Random hex needs ≥ 40 characters to be caught (see below) |
+| **Repeated auth failures** (`auth_failures`) | `app/detection/auth_failures.py` | ≥ 5 failures from one IP **or** against one username within 300 s | medium at 5, high at 15 (or one account attacked from ≥ 3 IPs), critical at 50 | A user who forgot their password; many users behind one NAT address |
+| **Suspicious web path** (`web_paths`) | `app/detection/web_paths.py` | Pattern matching on the normalised request path (traversal, sensitive files, admin panels, SQL/script/command injection) | highest severity among matched categories | WordPress sites trigger `admin_panel_probe`; sites serving `.sql` downloads trigger `sensitive_file`. Query strings are removed before storage, so attacks only in `?x=` are invisible |
 
-**How the engine works** (`backend/detection/engine.py`)
+**How the engine works** (`app/detection/engine.py`)
 1. After an event is stored, `process_event` runs every enabled rule on it.
 2. A rule that needs history (port scan, auth failures) says what it needs via `history_query`; the engine loads those events with `storage.events_in_window`. Windows end at the **event's own timestamp**, so delayed or replayed events are judged against the traffic around them.
 3. A rule returns an alert candidate or `None`. Candidates are stored with `storage.upsert_alert`: the same rule + source IP inside `ALERT_COOLDOWN_SECONDS` updates one open alert (count and evidence grow, severity can only go up) instead of creating many. Resolved and false-positive alerts are not reopened; new activity creates a fresh alert.
@@ -41,13 +41,13 @@ Rules are transparent: each alert states which rule fired, the threshold, the nu
 - In a flood, the engine loads at most 2000 earlier events per query, so counts are then a lower bound (`history_capped: true`). Measured cost: about 3 ms per event while a scan is in progress.
 - Heuristics, not proof. Every alert is an indicator for a human to look at.
 
-To add a rule: create a module in `backend/detection/` with `RULE_NAME` and `evaluate(event, recent_events, settings)` (plus `history_query` if it needs earlier events), add it to `RULES` in `engine.py`, and write a unit test with a should-fire and a should-not-fire case.
+To add a rule: create a module in `app/detection/` with `RULE_NAME` and `evaluate(event, recent_events, settings)` (plus `history_query` if it needs earlier events), add it to `RULES` in `engine.py`, and write a unit test with a should-fire and a should-not-fire case.
 
 ---
 
 # Part B: wiring notes (for config.py, .env.example and the events route)
 
-## Settings the rules already read (already in `backend/config.py`)
+## Settings the rules already read (already in `app/config.py`)
 `port_scan_ports`, `port_scan_window_seconds`, `dns_max_label_length`, `dns_min_entropy`, `auth_fail_count`, `auth_fail_window_seconds`, `alert_cooldown_seconds`, `web_path_patterns`, `web_path_disabled_categories`.
 
 ## New optional settings (add to `Settings`; every one has a safe default inside the rules, so nothing breaks if you skip this)
@@ -75,8 +75,8 @@ DETECTION_DISABLED_RULES=
 
 ```python
 from starlette.concurrency import run_in_threadpool
-from backend import storage
-from backend.detection import engine
+from app import storage
+from app.detection import engine
 
 # after validating the batch in POST /api/events:
 events = await run_in_threadpool(storage.insert_events, db, batch)

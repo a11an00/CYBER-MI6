@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# frontend/.env.live holds no secrets: it only switches the dev server to the real API
+!frontend/.env.live
 
 # --- databases (events can contain DNS names / IPs: never share or commit) ---
 data/
@@ -40,3 +42,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 graphify-out/
+
+# --- browser e2e check (tests/e2e_browser): installed packages and screenshots
+tests/e2e_browser/node_modules/
+tests/e2e_browser/package-lock.json
+tests/e2e_browser/shots/

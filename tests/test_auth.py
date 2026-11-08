@@ -2,7 +2,7 @@ import pytest
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from backend.config import Settings, get_settings
+from app.config import Settings, get_settings
 from backend.security import require_api_key
 
 

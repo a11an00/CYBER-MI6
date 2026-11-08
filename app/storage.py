@@ -11,6 +11,8 @@ Windows  events_in_window, count_events, count_distinct
 Alerts   insert_alert, upsert_alert, get_alert, list_alerts, update_alert_status,
          get_alert_evidence
 Dash     stats
+Users    create_user, get_user, get_user_by_username, list_users, update_user, record_login
+Blocks   add_block, list_blocked, remove_block
 Upkeep   purge_old_events
 
 All times are UTC. Arguments named ``since`` / ``until`` / ``now`` are datetimes
@@ -18,11 +20,14 @@ All times are UTC. Arguments named ``since`` / ``until`` / ``now`` are datetimes
 """
 
 import json
+import sqlite3
+import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
-from backend.db import Database, from_db_ts, to_db_ts
-from backend.models import (
+from app.db import Database, from_db_ts, to_db_ts
+from app.models import (
     MAX_EVIDENCE_IDS,
     OPEN_STATUSES,
     SEVERITIES,
@@ -31,6 +36,7 @@ from backend.models import (
     Alert,
     AlertIn,
     AlertUpdate,
+    BlockedIp,
     Event,
     EventIn,
     Stats,
@@ -360,12 +366,24 @@ def upsert_alert(
         existing = _row_to_alert(row)
         incoming = _dedupe_ids(a.evidence_event_ids)
         seen = set(existing.evidence_event_ids)
-        new_ids = [i for i in incoming if i not in seen]
-        if incoming and not new_ids:  # same evidence as before: nothing new to record
+        min_seen = (
+            min(existing.evidence_event_ids)
+            if (existing.evidence_event_ids and existing.count > len(existing.evidence_event_ids))
+            else None
+        )
+        new_ids = [
+            i for i in incoming
+            if i not in seen and (min_seen is None or i > min_seen)
+        ]
+        severity = max(existing.severity, a.severity, key=lambda s: SEVERITY_RANK[s])
+        escalated = SEVERITY_RANK[a.severity] > SEVERITY_RANK[existing.severity]
+        details_changed = (a.title != existing.title) or (a.explanation != existing.explanation)
+
+        if incoming and not new_ids and not escalated and not details_changed:
             return existing, False
+
         added = len(new_ids) if incoming else 1
         merged = (existing.evidence_event_ids + new_ids)[-MAX_EVIDENCE_IDS:]
-        severity = max(existing.severity, a.severity, key=lambda s: SEVERITY_RANK[s])
         conn.execute(
             "UPDATE alerts SET updated_at = ?, severity = ?, title = ?, evidence_event_ids = ?, "
             "count = count + ?, explanation = ? WHERE id = ?",
@@ -495,6 +513,8 @@ def purge_old_events(
     """
     if retention_days <= 0:
         raise ValueError("retention_days must be positive")
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
     cutoff = to_db_ts((now or utcnow()) - timedelta(days=retention_days))
     total = 0
     while True:
@@ -507,3 +527,192 @@ def purge_old_events(
         total += deleted
         if deleted < chunk_size:
             return total
+
+
+# --------------------------------------------------------------------------
+# Users (dashboard accounts)
+# --------------------------------------------------------------------------
+@dataclass(frozen=True)
+class UserRecord:
+    """A users row INCLUDING the password hash. Never return this from an API route:
+    convert it with ``to_profile`` (in the API layer, backend/auth.py) first."""
+
+    id: str
+    username: str
+    password_hash: str
+    role: str
+    status: str
+    created_at: datetime
+    last_login: datetime | None
+
+
+class UsernameTakenError(Exception):
+    """Another account already uses that username (case-insensitive)."""
+
+
+class LastAdminError(Exception):
+    """The change would leave the system without an active admin."""
+
+
+_USER_COLUMNS = "id, username, password_hash, role, status, created_at, last_login"
+
+
+def _row_to_user(row) -> UserRecord:
+    return UserRecord(
+        id=row["id"],
+        username=row["username"],
+        password_hash=row["password_hash"],
+        role=row["role"],
+        status=row["status"],
+        created_at=from_db_ts(row["created_at"]),
+        last_login=from_db_ts(row["last_login"]) if row["last_login"] else None,
+    )
+
+
+def _fetch_user(conn, user_id: str) -> UserRecord | None:
+    row = conn.execute(f"SELECT {_USER_COLUMNS} FROM users WHERE id = ?", (user_id,)).fetchone()
+    return _row_to_user(row) if row else None
+
+
+def create_user(
+    db: Database,
+    *,
+    username: str,
+    password_hash: str,
+    role: str,
+    status: str = "active",
+    now: datetime | None = None,
+) -> UserRecord:
+    """Insert a user. Raises UsernameTakenError on a duplicate (case-insensitive) username."""
+    stamp = to_db_ts(now or utcnow())
+    user_id = uuid.uuid4().hex
+    try:
+        with db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO users (id, username, password_hash, role, status, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (user_id, username, password_hash, role, status, stamp, stamp),
+            )
+            return _fetch_user(conn, user_id)  # type: ignore[return-value]
+    except sqlite3.IntegrityError as exc:
+        if "username" in str(exc):
+            raise UsernameTakenError(username) from exc
+        raise
+
+
+def get_user(db: Database, user_id: str) -> UserRecord | None:
+    return _fetch_user(db.connection(), user_id)
+
+
+def get_user_by_username(db: Database, username: str) -> UserRecord | None:
+    row = db.connection().execute(
+        f"SELECT {_USER_COLUMNS} FROM users WHERE username = ?", (username,)  # column is NOCASE
+    ).fetchone()
+    return _row_to_user(row) if row else None
+
+
+def list_users(db: Database) -> list[UserRecord]:
+    rows = db.connection().execute(f"SELECT {_USER_COLUMNS} FROM users ORDER BY username").fetchall()
+    return [_row_to_user(r) for r in rows]
+
+
+def update_user(
+    db: Database,
+    user_id: str,
+    *,
+    username: str | None = None,
+    password_hash: str | None = None,
+    role: str | None = None,
+    status: str | None = None,
+    now: datetime | None = None,
+) -> UserRecord | None:
+    """Change the given fields (None = leave alone). Returns the user, or None if it doesn't exist.
+
+    The check that the last active admin is not demoted or disabled runs in the same write
+    transaction as the change, so two admins removing each other cannot both succeed.
+    Raises LastAdminError / UsernameTakenError.
+    """
+    try:
+        with db.transaction() as conn:
+            current = _fetch_user(conn, user_id)
+            if current is None:
+                return None
+            new_role = role if role is not None else current.role
+            new_status = status if status is not None else current.status
+            was_active_admin = current.role == "admin" and current.status == "active"
+            stays_active_admin = new_role == "admin" and new_status == "active"
+            if was_active_admin and not stays_active_admin:
+                active_admins = conn.execute(
+                    "SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active'"
+                ).fetchone()[0]
+                if active_admins <= 1:
+                    raise LastAdminError(user_id)
+            conn.execute(
+                "UPDATE users SET username = ?, password_hash = ?, role = ?, status = ?, updated_at = ? "
+                "WHERE id = ?",
+                (
+                    username if username is not None else current.username,
+                    password_hash if password_hash is not None else current.password_hash,
+                    new_role,
+                    new_status,
+                    to_db_ts(now or utcnow()),
+                    user_id,
+                ),
+            )
+            return _fetch_user(conn, user_id)
+    except sqlite3.IntegrityError as exc:
+        if "username" in str(exc):
+            raise UsernameTakenError(username) from exc
+        raise
+
+
+def record_login(db: Database, user_id: str, *, now: datetime | None = None) -> None:
+    with db.transaction() as conn:
+        conn.execute("UPDATE users SET last_login = ? WHERE id = ?", (to_db_ts(now or utcnow()), user_id))
+
+
+# --------------------------------------------------------------------------
+# Blocklist (record only)
+# --------------------------------------------------------------------------
+def _row_to_block(row) -> BlockedIp:
+    return BlockedIp(
+        ip=row["ip"],
+        alert_id=row["alert_id"],
+        reason=row["reason"],
+        blocked_at=from_db_ts(row["blocked_at"]),
+        blocked_by=row["blocked_by"],
+    )
+
+
+def add_block(
+    db: Database,
+    *,
+    ip: str,
+    alert_id: int | None,
+    reason: str | None,
+    blocked_by: str,
+    now: datetime | None = None,
+) -> tuple[BlockedIp, bool]:
+    """Record an address. Returns (entry, created). Blocking an address that is already
+    blocked changes nothing and returns the existing entry with created=False."""
+    with db.transaction() as conn:
+        row = conn.execute("SELECT * FROM blocklist WHERE ip = ?", (ip,)).fetchone()
+        if row is not None:
+            return _row_to_block(row), False
+        conn.execute(
+            "INSERT INTO blocklist (ip, alert_id, reason, blocked_at, blocked_by) VALUES (?, ?, ?, ?, ?)",
+            (ip, alert_id, reason or None, to_db_ts(now or utcnow()), blocked_by),
+        )
+        return _row_to_block(conn.execute("SELECT * FROM blocklist WHERE ip = ?", (ip,)).fetchone()), True
+
+
+def list_blocked(db: Database) -> list[BlockedIp]:
+    """Newest first."""
+    rows = db.connection().execute("SELECT * FROM blocklist ORDER BY blocked_at DESC, ip").fetchall()
+    return [_row_to_block(r) for r in rows]
+
+
+def remove_block(db: Database, ip: str) -> bool:
+    """True if the address was on the list."""
+    with db.transaction() as conn:
+        return conn.execute("DELETE FROM blocklist WHERE ip = ?", (ip,)).rowcount > 0

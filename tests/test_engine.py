@@ -5,11 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend import storage
-from backend.config import Settings
-from backend.detection import auth_failures, dns_anomaly, engine, portscan
-from backend.detection.engine import AlertResult, process_event, process_events
-from backend.models import AlertIn, AlertUpdate
+from app import storage
+from app.config import Settings
+from app.detection import auth_failures, dns_anomaly, engine, portscan
+from app.detection.engine import AlertResult, process_event, process_events
+from app.models import AlertIn, AlertUpdate
 from tests.detection_helpers import T0, at, dns, login_fail, request, scan, syn
 
 S = SimpleNamespace(port_scan_ports=20, port_scan_window_seconds=30, alert_cooldown_seconds=300)
@@ -154,7 +154,7 @@ def test_a_failing_rule_does_not_stop_the_others_or_the_engine(db, caplog):
 
     rules = (Broken, NeedsBadQuery, dns_anomaly)
     event = storage.insert_event(db, dns(f"{RANDOM_LABEL}.example.net"))
-    with caplog.at_level(logging.ERROR, logger="backend.detection.engine"):
+    with caplog.at_level(logging.ERROR, logger="app.detection.engine"):
         results = process_event(db, event, S, rules=rules, now=T0)
     assert [r.rule for r in results] == ["dns_anomaly"]
     assert "broken" in caplog.text and "bad_query" in caplog.text

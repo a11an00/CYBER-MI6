@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.detection.dns_anomaly import RULE_NAME, evaluate, inspect_name, shannon_entropy
-from backend.models import MAX_EXPLANATION_BYTES, MAX_TITLE_LEN, AlertIn
+from app.detection.dns_anomaly import RULE_NAME, evaluate, inspect_name, shannon_entropy
+from app.models import MAX_EXPLANATION_BYTES, MAX_TITLE_LEN, AlertIn
 from tests.detection_helpers import dns, login_fail, with_ids
 
 S = SimpleNamespace(dns_max_label_length=40, dns_min_entropy=3.8, dns_entropy_min_label_length=16)
